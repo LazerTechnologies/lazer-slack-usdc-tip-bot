@@ -1,0 +1,50 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# Prisma
+prisma/.env
+prisma/migrations/*/README.md
+
+# Generated
+src/generated/
+
+# Test coverage
+coverage/
+
+# Others
+*.local
+*.sublime-workspace
+*.sublime-project
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Misc
+*.tgz
+*.swp
+*.swo
+.idea/
+
+# Ignore biome config
+biome.json

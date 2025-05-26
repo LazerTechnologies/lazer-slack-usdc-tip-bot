@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: slack-tip
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD:  admin
+      POSTGRES_DB: prisma
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+volumes:
+  postgres_data:

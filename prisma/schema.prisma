@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+  output = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                Int   @id @default(autoincrement())
+  slackId           String   @unique
+  ethAddress        String?  // Withdrawal address, optional
+  depositAddress    String?  // Optional, for user deposits
+  balance           Decimal  @default(0)
+  extraBalance      Decimal  @default(0)
+  tipsGivenToday    Int      @default(0)
+  lastTipDate       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  tipsReceived      Tip[]    @relation("ReceivedTips")
+  tipsSent          Tip[]    @relation("SentTips")
+}
+
+model Tip {
+  id          String   @id @default(uuid())
+  fromUser    User     @relation("SentTips", fields: [fromUserId], references: [id])
+  fromUserId  Int
+  toUser      User     @relation("ReceivedTips", fields: [toUserId], references: [id])
+  toUserId    Int
+  amount      Decimal
+  messageTs   String   // Slack message timestamp
+  channelId   String   // Slack channel ID
+  hash        String?  // On-chain transaction hash, optional
+  createdAt   DateTime @default(now())
+}

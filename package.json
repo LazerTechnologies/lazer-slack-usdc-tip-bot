@@ -1,0 +1,25 @@
+{
+    "name": "slack-tip-bot",
+    "version": "0.1.0",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "tsx --watch src/index.ts",
+        "start": "tsx src/index.ts",
+        "prisma:migrate": "prisma migrate dev --name init",
+        "prisma:generate": "prisma generate"
+    },
+    "dependencies": {
+        "@biomejs/biome": "^1.9.4",
+        "@prisma/client": "6.8.2",
+        "@slack/bolt": "4.4.0",
+        "dotenv": "^16.0.0",
+        "p-queue": "^8.1.0",
+        "viem": "latest",
+        "vitest": "^3.1.4"
+    },
+    "devDependencies": {
+        "prisma": "6.8.2",
+        "tsx": "^4.19.4",
+        "typescript": "5.8.3"
+    }
+}
