@@ -106,8 +106,9 @@ app.event('reaction_added', async ({ event, client, context, say }) => {
       console.log('[TIP] Recipient has no withdrawal address, notifying', { recipientSlackId });
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const recipientTipsLeft = DAILY_TIP_LIMIT - (recipient.tipsGivenToday + 1);
       if (!recipient.lastTipDate || recipient.lastTipDate < today) {
-        await sendDM(client, recipientSlackId, "You received a tip! To withdraw your USDC, DM me your Ethereum address");
+        await sendDM(client, recipientSlackId, `You received a tip!\nYou have ${recipientTipsLeft} free tips left to give today.\nTo withdraw your USDC, DM me your Ethereum address`);
         await prismaTx.user.update({
           where: { slackId: recipientSlackId },
           data: { lastTipDate: new Date() },
@@ -168,7 +169,7 @@ app.event('reaction_added', async ({ event, client, context, say }) => {
       });
       // Notify tipper immediately
       const tipsLeft = DAILY_TIP_LIMIT - (tipper.tipsGivenToday + 1);
-      await sendDM(client, tipperSlackId, `You tipped <@${recipientSlackId}> 0.01 USDC! You have ${tipsLeft} tips left today.`);
+      await sendDM(client, tipperSlackId, `You tipped <@${recipientSlackId}> 0.01 USDC! You have ${tipsLeft} tips left today.\nMessage "deposit" to and I will generate a USDC deposit address to give you extra balance for tipping.`);
     } else {
       // Credit tip in internal balance
       console.log('[TIP] Crediting internal balance', { recipientSlackId });
@@ -192,8 +193,8 @@ app.event('reaction_added', async ({ event, client, context, say }) => {
           lastTipDate: new Date(),
         },
       });
-      await sendDM(client, tipperSlackId, `You tipped <@${recipientSlackId}> 0.01 USDC!`);
-      await sendDM(client, recipientSlackId, `You just received a tip from <@${tipperSlackId}>!\nTo withdraw your USDC, DM me your wallet address`);
+      await sendDM(client, tipperSlackId, `You tipped <@${recipientSlackId}> 0.01 USDC! You have ${DAILY_TIP_LIMIT - (tipper.tipsGivenToday + 1)} tips left today.\nMessage "deposit" to and I will generate a USDC deposit address to give you extra balance for tipping.`);
+      await sendDM(client, recipientSlackId, `You just received a tip from <@${tipperSlackId}>!\nYou have ${recipient.balance} USDC accrued.\nTo withdraw your USDC, DM me your wallet address`);
     }
   });
 });
