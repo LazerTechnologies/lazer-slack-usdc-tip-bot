@@ -1,14 +1,14 @@
-import app from "./slackClient";
-import prisma from "../db/prismaClient";
+import app from "./slackClient.ts";
+import prisma from "../db/prismaClient.ts";
 import {
 	adminAccount,
 	getUSDCBalance,
 	USDCContract,
 	publicClient,
-} from "../blockchain/wallet";
+} from "../blockchain/wallet.ts";
 import { Decimal } from "@prisma/client/runtime/library";
-import { blockchainQueue } from "../blockchain/tx-queue";
-import type { Prisma, User, Tip } from "../generated";
+import { blockchainQueue } from "../blockchain/tx-queue.ts";
+import type { Prisma, User, Tip } from "../generated/index.d.ts";
 import type { WebClient } from "@slack/web-api";
 
 const TIP_AMOUNT = new Decimal(0.01);
@@ -159,7 +159,7 @@ async function processBlockchainTip({
 
 			// Calculate recipient's free tips left today (on-chain tips are always after increment, so +1)
 			const DAILY_TIP_LIMIT = 10;
-			const tipsLeft = DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1);
+			const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1));
 			await sendDM(
 				client,
 				recipient.slackId,
@@ -216,7 +216,7 @@ async function processInternalTip({
 
 	// Calculate recipient's free tips left today
 	const DAILY_TIP_LIMIT = 10;
-	const tipsLeft = DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1);
+	const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1));
 	await sendDM(
 		client,
 		recipient.slackId,
@@ -226,7 +226,7 @@ async function processInternalTip({
 	// DM the tipper with confirmation and quota/balance info
 	const tipperTipsGiven = (tipper.tipsGivenToday ?? 0) + 1;
 	const hasFreeTips = tipperTipsGiven < DAILY_TIP_LIMIT;
-	const tipsLeftTipper = DAILY_TIP_LIMIT - tipperTipsGiven;
+	const tipsLeftTipper = Math.max(0, DAILY_TIP_LIMIT - tipperTipsGiven);
 	const hasExtraBalance = tipper.extraBalance?.gte(TIP_AMOUNT);
 	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(TIP_AMOUNT) : new Decimal(0);
 	let tipperMsg = `✅ You tipped <@${recipient.slackId}> 0.01 USDC!`;

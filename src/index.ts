@@ -1,9 +1,7 @@
-import app from './bot/slackClient';
+import app from './bot/slackClient.ts';
 import './bot/tipping';
-import './bot/withdrawal';
-import './bot/deposit';
-import './bot/update';
 import './bot/homeTab';
+import './db/setupAdmins';
 
 const port = process.env.PORT || 3000;
 

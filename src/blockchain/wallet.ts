@@ -1,9 +1,9 @@
-import { type Address, createPublicClient, createWalletClient, formatUnits, http, parseUnits } from 'viem';
+import { type Address, createPublicClient, createWalletClient, formatUnits, http } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 import dotenv from 'dotenv';
 import { getContract } from 'viem';
-import { USDCABI } from '../USDCAbi';
+import { USDCABI } from '../USDCAbi.ts';
 import { signTypedData } from 'viem/accounts';
 import { toHex } from 'viem';
 

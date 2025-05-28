@@ -35,3 +35,11 @@ model Tip {
   hash        String?  // On-chain transaction hash, optional
   createdAt   DateTime @default(now())
 }
+
+model Settings {
+  id                Int      @id @default(1)
+  dailyFreeTipAmount Decimal  @default(10)
+  tipAmount         Decimal  @default(0.01)
+  adminSlackIds     String[] // Array of Slack IDs for admins
+  updatedAt         DateTime @updatedAt
+}

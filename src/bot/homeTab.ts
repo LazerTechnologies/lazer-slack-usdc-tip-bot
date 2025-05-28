@@ -1,16 +1,16 @@
-import app from "./slackClient";
-import prisma from "../db/prismaClient";
-import { getUserDepositAccount } from "../blockchain/wallet";
+import app from "./slackClient.ts";
+import prisma from "../db/prismaClient.ts";
+import { getUserDepositAccount, sweep } from "../blockchain/wallet.ts";
 import { isAddress } from "viem";
-import type { User as UserType, Tip } from "../generated";
+import type { User as UserType, Tip } from "../generated/index.ts";
 import {
 	getUSDCBalance,
 	adminAccount,
-	sweep,
 	publicClient,
-} from "../blockchain/wallet";
+	USDCContract,
+} from "../blockchain/wallet.ts";
 import { maxInt256, formatUnits } from "viem";
-import { blockchainQueue } from "../blockchain/tx-queue";
+import { blockchainQueue } from "../blockchain/tx-queue.ts";
 
 // Helper to build Home Tab blocks dynamically
 async function getHomeTabBlocks(user: UserType | null) {
@@ -66,7 +66,7 @@ async function getHomeTabBlocks(user: UserType | null) {
 	const withdrawalAddress = user?.ethAddress || "Not set";
 	const DAILY_TIP_LIMIT = 10;
 	const tipsGivenToday = user?.tipsGivenToday ?? 0;
-	const tipsLeft = DAILY_TIP_LIMIT - tipsGivenToday;
+	const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - tipsGivenToday);
 	const actions: Record<string, unknown>[] = [];
 	if (!user?.depositAddress) {
 		actions.push({
@@ -90,6 +90,15 @@ async function getHomeTabBlocks(user: UserType | null) {
 			style: "danger",
 		},
 	);
+	// Add Withdraw Extra Balance button if user has withdrawal address and extraBalance > 0
+	if (user?.ethAddress && user.extraBalance && Number(user.extraBalance) > 0) {
+		actions.push({
+			type: "button",
+			text: { type: "plain_text", text: "⬇️ Withdraw Extra Balance" },
+			action_id: "withdraw_extra_balance",
+			style: "primary",
+		});
+	}
 
 	// --- Fetch stats ---
 	type TipSent = Tip & { toUser: { slackId: string } };
@@ -162,6 +171,11 @@ async function getHomeTabBlocks(user: UserType | null) {
 		adminUsdcBalance = "error";
 	}
 
+	// Calculate local midnight for the user (server time, but formatted as local)
+	const resetDate = new Date();
+	resetDate.setHours(0, 0, 0, 0);
+	const resetTimeLocal = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 	return [
 		{
 			type: "section",
@@ -174,16 +188,19 @@ async function getHomeTabBlocks(user: UserType | null) {
 ${totalTipsEver} USDC` },
 				{ type: "mrkdwn", text: `*Tips Sent Today:*
 ${tipsSentToday}` },
-				{ type: "mrkdwn", text: `*Biggest Tipper:*
+				{ type: "mrkdwn", text: `*Biggest Tipper 👑:*
 ${biggestTipper} (${biggestTipperAmount} USDC)` },
-				{ type: "mrkdwn", text: `*Biggest Receiver:*
+				{ type: "mrkdwn", text: `*Biggest Receiver 💰:*
 ${biggestReceiver} (${biggestReceiverAmount} USDC)` },
 			],
 		},
 		{ type: "divider" },
 		{
 			type: "section",
-			text: { type: "mrkdwn", text: "*👑 Admin Wallet Info*" },
+			text: {
+				type: "mrkdwn",
+				text: "*👑 Admin Wallet Info*\nYou can send USDC or ETH to the admin address below to add extra tips to the pool and power transactions."
+			},
 		},
 		{
 			type: "section",
@@ -206,8 +223,9 @@ ${biggestReceiver} (${biggestReceiverAmount} USDC)` },
 					? [{ type: "mrkdwn", text: `*Balance:*\n*${balance}* USDC _(free tips)_` }]
 					: []),
 				{ type: "mrkdwn", text: `*Extra Balance:*\n*${extraBalance}* USDC _(deposited for extra tips)_` },
-				{ type: "mrkdwn", text: `*Tips Left Today:*\n*${tipsLeft}* / ${DAILY_TIP_LIMIT} 🎁` },
-				{ type: "mrkdwn", text: `*Deposit Address:*\n${depositAddress !== "Not set" ? `<https://basescan.org/address/${depositAddress}|\`${depositAddress}\`>` : "Not set"}` },
+				{ type: "mrkdwn", text: `*Tips Left Today:*\n*${tipsLeft}* / ${DAILY_TIP_LIMIT} 🎁  _(resets daily at midnight server time)_` },
+				{ type: "mrkdwn", text: `*Deposit Address:*
+${depositAddress !== "Not set" ? `<https://basescan.org/address/${depositAddress}|\`${depositAddress}\`>` : "Not set"} ${(depositAddress !== "Not set") ? "_(click sweep below to update after sent)_" : ""}` },
 				{ type: "mrkdwn", text: `*Withdrawal Address:*\n${withdrawalAddress !== "Not set" ? `<https://basescan.org/address/${withdrawalAddress}|\`${withdrawalAddress}\`>` : "Not set"}` },
 			],
 		},
@@ -304,6 +322,13 @@ app.action("set_withdrawal_address", async ({ ack, body, client }) => {
 			close: { type: "plain_text", text: "Cancel" },
 			blocks: [
 				{
+					type: "section",
+					text: {
+						type: "mrkdwn",
+						text: "*This is the address where your tips will be sent directly when you receive them. It should be a wallet you control on the Base blockchain, or a USDC deposit address for Base on Coinbase or another centralized exchange.*"
+					}
+				},
+				{
 					type: "input",
 					block_id: "eth_address_block",
 					label: { type: "plain_text", text: "Ethereum Address" },
@@ -391,6 +416,47 @@ app.action("sweep_deposit_balance", async ({ ack, body, client }) => {
 		await client.chat.postMessage({
 			channel: slackId,
 			text: `No new USDC deposits found for <@${slackId}>.`,
+		});
+	}
+});
+
+// Handle Withdraw Extra Balance button
+app.action("withdraw_extra_balance", async ({ ack, body, client }) => {
+	await ack();
+	const slackId = body.user.id;
+	const user = await prisma.user.findUnique({ where: { slackId } });
+	if (!user || !user.ethAddress || !user.extraBalance || Number(user.extraBalance) <= 0) {
+		await client.chat.postMessage({
+			channel: slackId,
+			text: "You must have a withdrawal address set and a positive extra balance to withdraw.",
+		});
+		return;
+	}
+	// Convert extraBalance (stored as normal USDC, e.g. 1.96) to smallest unit for transfer
+	const amount = BigInt(Math.round(Number(user.extraBalance) * 1_000_000)); // USDC has 6 decimals
+	const to = user.ethAddress as `0x${string}`;
+	try {
+		blockchainQueue.add(async () => {
+			// Standard USDC transfer from admin wallet to user withdrawal address
+			const txHash = await USDCContract.write.transfer([to, amount]);
+			await publicClient.waitForTransactionReceipt({ hash: txHash });
+			await prisma.user.update({
+				where: { id: user.id },
+				data: { extraBalance: 0 },
+			});
+			await client.chat.postMessage({
+				channel: slackId,
+				text: `Withdrew ${user.extraBalance} USDC to your withdrawal address! https://basescan.org/tx/${txHash}`,
+			});
+		});
+		await client.chat.postMessage({
+			channel: slackId,
+			text: `Processing withdrawal of ${user.extraBalance} USDC to <${user.ethAddress}>...`,
+		});
+	} catch (e) {
+		await client.chat.postMessage({
+			channel: slackId,
+			text: `Error processing withdrawal: ${e}`,
 		});
 	}
 });
