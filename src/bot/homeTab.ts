@@ -14,6 +14,52 @@ import { blockchainQueue } from "../blockchain/tx-queue";
 
 // Helper to build Home Tab blocks dynamically
 async function getHomeTabBlocks(user: UserType | null) {
+	// --- Global Stats ---
+	// Total amount of tips ever given
+	const totalTipsAgg = await prisma.tip.aggregate({ _sum: { amount: true } });
+	const totalTipsEver = totalTipsAgg._sum.amount?.toString() || "0";
+
+	// Tips sent today
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	const tipsSentToday = await prisma.tip.count({
+		where: { createdAt: { gte: today } },
+	});
+
+	// Biggest tipper (most sent)
+	const biggestTipperAgg = await prisma.tip.groupBy({
+		by: ["fromUserId"],
+		_sum: { amount: true },
+		orderBy: { _sum: { amount: "desc" } },
+		take: 1,
+	});
+	let biggestTipper = "-";
+	let biggestTipperAmount = "0";
+	if (biggestTipperAgg.length > 0) {
+		const tipperUser = await prisma.user.findUnique({ where: { id: biggestTipperAgg[0].fromUserId } });
+		if (tipperUser) {
+			biggestTipper = `<@${tipperUser.slackId}>`;
+			biggestTipperAmount = biggestTipperAgg[0]._sum.amount?.toString() || "0";
+		}
+	}
+
+	// Biggest receiver (most received)
+	const biggestReceiverAgg = await prisma.tip.groupBy({
+		by: ["toUserId"],
+		_sum: { amount: true },
+		orderBy: { _sum: { amount: "desc" } },
+		take: 1,
+	});
+	let biggestReceiver = "-";
+	let biggestReceiverAmount = "0";
+	if (biggestReceiverAgg.length > 0) {
+		const receiverUser = await prisma.user.findUnique({ where: { id: biggestReceiverAgg[0].toUserId } });
+		if (receiverUser) {
+			biggestReceiver = `<@${receiverUser.slackId}>`;
+			biggestReceiverAmount = biggestReceiverAgg[0]._sum.amount?.toString() || "0";
+		}
+	}
+
 	const balance = user ? user.balance.toString() : "0";
 	const extraBalance = user ? user.extraBalance.toString() : "0";
 	const depositAddress = user?.depositAddress || "Not set";
@@ -119,17 +165,32 @@ async function getHomeTabBlocks(user: UserType | null) {
 	return [
 		{
 			type: "section",
+			text: { type: "mrkdwn", text: "*🌎 Global Tip Stats*" },
+		},
+		{
+			type: "section",
+			fields: [
+				{ type: "mrkdwn", text: `*Total Tips Ever:*
+${totalTipsEver} USDC` },
+				{ type: "mrkdwn", text: `*Tips Sent Today:*
+${tipsSentToday}` },
+				{ type: "mrkdwn", text: `*Biggest Tipper:*
+${biggestTipper} (${biggestTipperAmount} USDC)` },
+				{ type: "mrkdwn", text: `*Biggest Receiver:*
+${biggestReceiver} (${biggestReceiverAmount} USDC)` },
+			],
+		},
+		{ type: "divider" },
+		{
+			type: "section",
 			text: { type: "mrkdwn", text: "*👑 Admin Wallet Info*" },
 		},
 		{
 			type: "section",
 			fields: [
-				{ type: "mrkdwn", text: `*Address:*
-<https://basescan.org/address/${adminEthAddress}|\`${adminEthAddress}\`>` },
-				{ type: "mrkdwn", text: `*ETH Balance:*
-${adminEthBalance} ETH` },
-				{ type: "mrkdwn", text: `*USDC Balance:*
-${adminUsdcBalance} USDC` },
+				{ type: "mrkdwn", text: `*Address:*\n<https://basescan.org/address/${adminEthAddress}|\`${adminEthAddress}\`>` },
+				{ type: "mrkdwn", text: `*ETH Balance:*\n${adminEthBalance} ETH _(for gas/transaction fees)_` },
+				{ type: "mrkdwn", text: `*USDC Balance:*\n${adminUsdcBalance} USDC _(tip pool: where tips are sent from)_` },
 			],
 		},
 		{ type: "divider" },
