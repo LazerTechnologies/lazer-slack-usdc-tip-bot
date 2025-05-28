@@ -13,6 +13,7 @@
         "@biomejs/biome": "^1.9.4",
         "@prisma/client": "6.8.2",
         "@slack/bolt": "4.4.0",
+        "@slack/web-api": "^7.9.2",
         "dotenv": "^16.0.0",
         "p-queue": "^8.1.0",
         "viem": "latest",
