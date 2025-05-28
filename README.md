@@ -25,26 +25,28 @@ A Slack bot that enables users to tip each other small amounts of USDC (on Base 
 ## Project Structure
 
 - `src/bot/` — Slack bot logic
-  - `tipping.ts` — Handles tipping logic and quota checks
-  - `withdrawal.ts` — Handles user withdrawal address setup and USDC transfers
-  - `deposit.ts` — Handles deposit address generation and balance top-ups
+  - `homeTab.ts` — Slack Home tab UI and logic
   - `slackClient.ts` — Slack API client helpers
-  - `update.ts` — Handles Slack event updates
+  - `tipping.ts` — Handles tipping logic and quota checks
 - `src/blockchain/` — Blockchain and wallet utilities
   - `wallet.ts` — Admin wallet and HD wallet logic
   - `tx-queue.ts` — Transaction queue for serializing blockchain operations
-  - `USDCAbi.ts` — USDC contract ABI
-- `src/db/` — Database client (Prisma)
+- `src/db/` — Database client (Prisma) and admin setup
+  - `prismaClient.ts` — Prisma client instance
+  - `setupAdmins.ts` — Admin user setup logic
 - `src/utils/` — Utility functions
+- `src/USDCAbi.ts` — USDC contract ABI
 - `src/index.ts` — Entry point, initializes the bot
 
 ## Permissions
 
-- Only the minimal Slack scopes are requested:
-  - `reactions:read` (to detect emoji reactions)
-  - `chat:write` (to send messages/DMs)
-  - `users:read` (to map Slack users)
-  - `im:write` (to DM users)
+- The bot requires the following minimal Slack scopes:
+  - `reactions:read` — Detect emoji reactions for tipping
+  - `chat:write` — Send messages and DMs
+  - `users:read` — Map Slack users and fetch user info
+  - `im:write` — Initiate and send DMs to users
+  - `app_home:read` — Read events from the App Home tab
+  - `app_home:write` — Publish and update the App Home tab UI
 
 ## Main Flows
 
