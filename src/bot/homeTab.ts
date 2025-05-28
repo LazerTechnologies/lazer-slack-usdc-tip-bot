@@ -15,6 +15,7 @@ import { blockchainQueue } from "../blockchain/tx-queue";
 // Helper to build Home Tab blocks dynamically
 async function getHomeTabBlocks(user: UserType | null) {
 	const balance = user ? user.balance.toString() : "0";
+	const extraBalance = user ? user.extraBalance.toString() : "0";
 	const depositAddress = user?.depositAddress || "Not set";
 	const withdrawalAddress = user?.ethAddress || "Not set";
 	const DAILY_TIP_LIMIT = 10;
@@ -116,25 +117,58 @@ async function getHomeTabBlocks(user: UserType | null) {
 	}
 
 	return [
-        {
+		{
 			type: "section",
-			text: {
-				type: "mrkdwn",
-				text:
-					`*👑 Admin Wallet Info*\n*Address:* \
-\`${adminEthAddress}\`\n*ETH Balance:* ${adminEthBalance} ETH\n*USDC Balance:* ${adminUsdcBalance} USDC`,
-			},
+			text: { type: "mrkdwn", text: "*👑 Admin Wallet Info*" },
 		},
 		{
 			type: "section",
-			text: {
-				type: "mrkdwn",
-				text:
-					`*💰 Your USDC Tip Bot Account*\n*Balance:* *${balance}* USDC\n*Deposit Address:* \n\`${depositAddress}\`\n*Withdrawal Address:* \n\`${withdrawalAddress}\`\n*Tips Left Today:* *${tipsLeft}* / ${DAILY_TIP_LIMIT} 🎁\n\n` +
-					`*📊 Lifetime Stats:*\n• *Total Tipped:* ${totalTipped} USDC\n• *Total Received:* ${totalReceived} USDC\n\n` +
-					`*🕒 Last 10 Tips Sent:*\n${tipsSentSection}\n\n` +
-					`*🕒 Last 10 Tips Received:*\n${tipsReceivedSection}`,
-			},
+			fields: [
+				{ type: "mrkdwn", text: `*Address:*
+<https://basescan.org/address/${adminEthAddress}|\`${adminEthAddress}\`>` },
+				{ type: "mrkdwn", text: `*ETH Balance:*
+${adminEthBalance} ETH` },
+				{ type: "mrkdwn", text: `*USDC Balance:*
+${adminUsdcBalance} USDC` },
+			],
+		},
+		{ type: "divider" },
+		{
+			type: "section",
+			text: { type: "mrkdwn", text: "*💰 Your USDC Tip Bot Account*" },
+		},
+		{
+			type: "section",
+			fields: [
+				// Only show balance if (no deposit address) OR (balance > 0)
+				...(depositAddress === "Not set" || balance !== "0"
+					? [{ type: "mrkdwn", text: `*Balance:*\n*${balance}* USDC _(free tips)_` }]
+					: []),
+				{ type: "mrkdwn", text: `*Extra Balance:*\n*${extraBalance}* USDC _(deposited for extra tips)_` },
+				{ type: "mrkdwn", text: `*Tips Left Today:*\n*${tipsLeft}* / ${DAILY_TIP_LIMIT} 🎁` },
+				{ type: "mrkdwn", text: `*Deposit Address:*\n${depositAddress !== "Not set" ? `<https://basescan.org/address/${depositAddress}|\`${depositAddress}\`>` : "Not set"}` },
+				{ type: "mrkdwn", text: `*Withdrawal Address:*\n${withdrawalAddress !== "Not set" ? `<https://basescan.org/address/${withdrawalAddress}|\`${withdrawalAddress}\`>` : "Not set"}` },
+			],
+		},
+		{
+			type: "section",
+			fields: [
+				{ type: "mrkdwn", text: `*Total Tipped:*
+${totalTipped} USDC` },
+				{ type: "mrkdwn", text: `*Total Received:*
+${totalReceived} USDC` },
+			],
+		},
+		{ type: "divider" },
+		{
+			type: "section",
+			text: { type: "mrkdwn", text: `*🕒 Last 10 Tips Sent:*
+${tipsSentSection}` },
+		},
+		{
+			type: "section",
+			text: { type: "mrkdwn", text: `*🕒 Last 10 Tips Received:*
+${tipsReceivedSection}` },
 		},
 		{
 			type: "actions",
