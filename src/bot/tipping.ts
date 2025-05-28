@@ -163,7 +163,7 @@ async function processBlockchainTip({
 			await sendDM(
 				client,
 				recipient.slackId,
-				`🎉 You just received a tip from <@${tipper.slackId}>!\nAmount: 0.01 USDC\nView transaction: ${basecanUrl}\nYou have ${tipsLeft} free tips left to give today.\nCheck your Home tab for your updated balance.`,
+				`🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}\nYou have ${tipsLeft} free tips left to give today.`,
 			);
 
 			// DM the tipper with confirmation and block explorer link
@@ -220,7 +220,7 @@ async function processInternalTip({
 	await sendDM(
 		client,
 		recipient.slackId,
-		`🎉 You just received a tip from <@${tipper.slackId}>!\nAmount: 0.01 USDC\nYou have ${tipsLeft} free tips left to give today.\nCheck your Home tab for your updated balance.`,
+		`🎉 You just received a tip from <@${tipper.slackId}>!\nYou have ${tipsLeft} free tips left to give today.`,
 	);
 
 	// DM the tipper with confirmation and quota/balance info
