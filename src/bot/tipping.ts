@@ -14,7 +14,7 @@ import type { WebClient } from "@slack/web-api";
 const TIP_AMOUNT = new Decimal(0.01);
 const DAILY_TIP_LIMIT = 10;
 
-// Helper to send a DM to a user
+// Helper to send a DM to a user (for tip notifications and critical alerts only)
 async function sendDM(client: WebClient, userId: string, text: string) {
 	const dm = await client.conversations.open({ users: userId });
 	if (!dm.channel) {
@@ -92,29 +92,6 @@ async function deductExtraBalance(
 	});
 }
 
-async function notifyRecipientIfNeeded(
-	prismaTx: Prisma.TransactionClient,
-	client: WebClient,
-	recipient: User,
-) {
-	if (!recipient.ethAddress) {
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-		const recipientTipsLeft = DAILY_TIP_LIMIT - (recipient.tipsGivenToday + 1);
-		if (!recipient.lastTipDate || recipient.lastTipDate < today) {
-			await sendDM(
-				client,
-				recipient.slackId,
-				`You received a tip!\nYou have ${recipientTipsLeft} free tips left to give today.\nTo withdraw your USDC, DM me your Ethereum address`,
-			);
-			await prismaTx.user.update({
-				where: { slackId: recipient.slackId },
-				data: { lastTipDate: new Date() },
-			});
-		}
-	}
-}
-
 interface TipContext {
 	prismaTx: Prisma.TransactionClient;
 	client: WebClient;
@@ -173,10 +150,14 @@ async function processBlockchainTip({
 				data: { hash },
 			});
 			const basecanUrl = `https://basescan.org/tx/${hash}`;
+
+			// Calculate recipient's free tips left today (on-chain tips are always after increment, so +1)
+			const DAILY_TIP_LIMIT = 10;
+			const tipsLeft = DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1);
 			await sendDM(
 				client,
 				recipient.slackId,
-				`You just received a tip from <@${tipper.slackId}> to ${recipient.ethAddress}\nView transaction: ${basecanUrl}`,
+				`🎉 You just received a tip from <@${tipper.slackId}>!\nAmount: 0.01 USDC\nView transaction: ${basecanUrl}\nYou have ${tipsLeft} free tips left to give today.\nCheck your Home tab for your updated balance.`,
 			);
 		} catch (err) {
 			await sendDM(
@@ -186,14 +167,9 @@ async function processBlockchainTip({
 			);
 		}
 	});
-	const tipsLeft = DAILY_TIP_LIMIT - (tipper.tipsGivenToday + 1);
-	await sendDM(
-		client,
-		tipper.slackId,
-		`You tipped <@${recipient.slackId}> 0.01 USDC! You have ${tipsLeft} tips left today.\nMessage "deposit" to and I will generate a USDC deposit address to give you extra balance for tipping.`,
-	);
 }
 
+// In processInternalTip, only DM the recipient for successful tips
 async function processInternalTip({
 	prismaTx,
 	client,
@@ -222,15 +198,14 @@ async function processInternalTip({
 			lastTipDate: new Date(),
 		},
 	});
-	await sendDM(
-		client,
-		tipper.slackId,
-		`You tipped <@${recipient.slackId}> 0.01 USDC! You have ${DAILY_TIP_LIMIT - (tipper.tipsGivenToday + 1)} tips left today.\nMessage "deposit" to and I will generate a USDC deposit address to give you extra balance for tipping.`,
-	);
+
+	// Calculate recipient's free tips left today
+	const DAILY_TIP_LIMIT = 10;
+	const tipsLeft = DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1);
 	await sendDM(
 		client,
 		recipient.slackId,
-		`You just received a tip from <@${tipper.slackId}>!\nYou have ${recipient.balance} USDC accrued.\nTo withdraw your USDC, DM me your wallet address`,
+		`🎉 You just received a tip from <@${tipper.slackId}>!\nAmount: 0.01 USDC\nYou have ${tipsLeft} free tips left to give today.\nCheck your Home tab for your updated balance.`,
 	);
 }
 
@@ -281,7 +256,6 @@ app.event("reaction_added", async ({ event, client }) => {
 			await deductExtraBalance(prismaTx, tipper);
 		}
 		const recipient = await getOrCreateUser(prismaTx, recipientSlackId);
-		await notifyRecipientIfNeeded(prismaTx, client, recipient);
 		if (recipient.ethAddress) {
 			await processBlockchainTip({
 				prismaTx,
