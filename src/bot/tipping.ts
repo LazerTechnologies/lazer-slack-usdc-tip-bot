@@ -10,7 +10,7 @@ const DAILY_TIP_LIMIT = 10;
 // Helper to send a DM to a user
 async function sendDM(client: any, userId: string, text: string) {
   const dm = await client.conversations.open({ users: userId });
-  const dmChannel = dm.channel && dm.channel.id ? dm.channel.id : null;
+  const dmChannel = dm.channel.id ? dm.channel.id : null;
   if (dmChannel) {
     await client.chat.postMessage({ channel: dmChannel, text });
     console.log('[TIP] Sent DM', { userId, dmChannel });
