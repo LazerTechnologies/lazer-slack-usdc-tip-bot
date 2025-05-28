@@ -11,6 +11,8 @@ import {
 } from "../blockchain/wallet.ts";
 import { maxInt256, formatUnits } from "viem";
 import { blockchainQueue } from "../blockchain/tx-queue.ts";
+import type { KnownBlock } from "@slack/web-api";
+import type { ActionsBlockElement } from '@slack/types';
 
 // Helper to build Home Tab blocks dynamically
 async function getHomeTabBlocks(user: UserType | null) {
@@ -67,7 +69,7 @@ async function getHomeTabBlocks(user: UserType | null) {
 	const DAILY_TIP_LIMIT = 10;
 	const tipsGivenToday = user?.tipsGivenToday ?? 0;
 	const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - tipsGivenToday);
-	const actions: Record<string, unknown>[] = [];
+	const actions: ActionsBlockElement[] = [];
 	if (!user?.depositAddress) {
 		actions.push({
 			type: "button",
@@ -90,7 +92,6 @@ async function getHomeTabBlocks(user: UserType | null) {
 			style: "danger",
 		},
 	);
-	// Add Withdraw Extra Balance button if user has withdrawal address and extraBalance > 0
 	if (user?.ethAddress && user.extraBalance && Number(user.extraBalance) > 0) {
 		actions.push({
 			type: "button",
@@ -176,7 +177,11 @@ async function getHomeTabBlocks(user: UserType | null) {
 	resetDate.setHours(0, 0, 0, 0);
 	const resetTimeLocal = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-	return [
+	// --- Admin Settings ---
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	const isAdmin = user && settings && settings.adminSlackIds.includes(user.slackId);
+
+	const blocks: KnownBlock[] = [
 		{
 			type: "section",
 			text: { type: "mrkdwn", text: "*🌎 Global Tip Stats*" },
@@ -219,23 +224,20 @@ ${biggestReceiver} (${biggestReceiverAmount} USDC)` },
 			type: "section",
 			fields: [
 				// Only show balance if (no deposit address) OR (balance > 0)
-				...(depositAddress === "Not set" || balance !== "0"
-					? [{ type: "mrkdwn", text: `*Balance:*\n*${balance}* USDC _(free tips)_` }]
+				...((depositAddress === "Not set" || balance !== "0")
+					? [{ type: "mrkdwn" as const, text: `*Balance:*\n*${balance}* USDC _(free tips)_` }]
 					: []),
-				{ type: "mrkdwn", text: `*Extra Balance:*\n*${extraBalance}* USDC _(deposited for extra tips)_` },
-				{ type: "mrkdwn", text: `*Tips Left Today:*\n*${tipsLeft}* / ${DAILY_TIP_LIMIT} 🎁  _(resets daily at midnight server time)_` },
-				{ type: "mrkdwn", text: `*Deposit Address:*
-${depositAddress !== "Not set" ? `<https://basescan.org/address/${depositAddress}|\`${depositAddress}\`>` : "Not set"} ${(depositAddress !== "Not set") ? "_(click sweep below to update after sent)_" : ""}` },
-				{ type: "mrkdwn", text: `*Withdrawal Address:*\n${withdrawalAddress !== "Not set" ? `<https://basescan.org/address/${withdrawalAddress}|\`${withdrawalAddress}\`>` : "Not set"}` },
+				{ type: "mrkdwn" as const, text: `*Extra Balance:*\n*${extraBalance}* USDC _(deposited for extra tips)_` },
+				{ type: "mrkdwn" as const, text: `*Tips Left Today:*\n*${tipsLeft}* / ${DAILY_TIP_LIMIT} 🎁  _(resets daily at midnight server time)_` },
+				{ type: "mrkdwn" as const, text: `*Deposit Address:*\n${depositAddress !== "Not set" ? `<https://basescan.org/address/${depositAddress}|\`${depositAddress}\`>` : "Not set"} ${(depositAddress !== "Not set") ? "_(click sweep below to update after sent)_" : ""}` },
+				{ type: "mrkdwn" as const, text: `*Withdrawal Address:*\n${withdrawalAddress !== "Not set" ? `<https://basescan.org/address/${withdrawalAddress}|\`${withdrawalAddress}\`>` : "Not set"}` },
 			],
 		},
 		{
 			type: "section",
 			fields: [
-				{ type: "mrkdwn", text: `*Total Tipped:*
-${totalTipped} USDC` },
-				{ type: "mrkdwn", text: `*Total Received:*
-${totalReceived} USDC` },
+				{ type: "mrkdwn" as const, text: `*Total Tipped:*\n${totalTipped} USDC` },
+				{ type: "mrkdwn" as const, text: `*Total Received:*\n${totalReceived} USDC` },
 			],
 		},
 		{ type: "divider" },
@@ -254,6 +256,56 @@ ${tipsReceivedSection}` },
 			elements: actions,
 		},
 	];
+
+	if (isAdmin && settings) {
+		blocks.push(
+			{ type: "divider" },
+			{
+				type: "section",
+				text: { type: "mrkdwn", text: "*⚙️ Admin Settings*" },
+			},
+			{
+				type: "section",
+				fields: [
+					{ type: "mrkdwn", text: `*Admins:*
+${settings.adminSlackIds.map(id => `<@${id}>`).join(", ")}` },
+					{ type: "mrkdwn", text: `*Daily Free Tip Amount:*
+${settings.dailyFreeTipAmount}` },
+					{ type: "mrkdwn", text: `*Tip Amount:*
+${settings.tipAmount}` },
+				],
+			},
+			{
+				type: "actions",
+				elements: [
+					{
+						type: "button",
+						text: { type: "plain_text", text: "➕ Add Admin" },
+						action_id: "add_admin_modal",
+						style: "primary"
+					},
+					{
+						type: "button",
+						text: { type: "plain_text", text: "➖ Remove Admin" },
+						action_id: "remove_admin_modal",
+						style: "danger"
+					},
+					{
+						type: "button",
+						text: { type: "plain_text", text: "✏️ Edit Daily Free Tip" },
+						action_id: "edit_daily_tip_modal"
+					},
+					{
+						type: "button",
+						text: { type: "plain_text", text: "✏️ Edit Tip Amount" },
+						action_id: "edit_tip_amount_modal"
+					}
+				]
+			}
+		);
+	}
+
+	return blocks;
 }
 
 // Home Tab handler
@@ -459,4 +511,197 @@ app.action("withdraw_extra_balance", async ({ ack, body, client }) => {
 			text: `Error processing withdrawal: ${e}`,
 		});
 	}
+});
+
+// Add Admin Modal
+app.action("add_admin_modal", async ({ ack, body, client }) => {
+	await ack();
+	// @ts-expect-error: trigger_id is present on body
+	const trigger_id = body.trigger_id;
+	await client.views.open({
+		trigger_id,
+		view: {
+			type: "modal",
+			title: { type: "plain_text", text: "Add Admin" },
+			submit: { type: "plain_text", text: "Add" },
+			close: { type: "plain_text", text: "Cancel" },
+			callback_id: "add_admin_submit",
+			blocks: [
+				{
+					type: "input",
+					block_id: "admin_id_block",
+					label: { type: "plain_text", text: "Slack User ID" },
+					element: {
+						type: "plain_text_input",
+						action_id: "admin_id_input",
+						placeholder: { type: "plain_text", text: "U12345678" }
+					}
+				}
+			]
+		}
+	});
+});
+
+app.view("add_admin_submit", async ({ ack, body, view, client }) => {
+	await ack();
+	const slackId = body.user.id;
+	const newAdminId = view.state.values.admin_id_block.admin_id_input.value;
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	if (settings && newAdminId && !settings.adminSlackIds.includes(newAdminId)) {
+		await prisma.settings.update({
+			where: { id: 1 },
+			data: { adminSlackIds: { set: [...settings.adminSlackIds, newAdminId] } }
+		});
+	}
+	const user = await prisma.user.findUnique({ where: { slackId } });
+	const blocks = await getHomeTabBlocks(user);
+	await client.views.publish({
+		user_id: slackId,
+		view: { type: "home", callback_id: "home_view", blocks }
+	});
+});
+
+// Remove Admin Modal
+app.action("remove_admin_modal", async ({ ack, body, client }) => {
+	await ack();
+	// @ts-expect-error: trigger_id is present on body
+	const trigger_id = body.trigger_id;
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	await client.views.open({
+		trigger_id,
+		view: {
+			type: "modal",
+			title: { type: "plain_text", text: "Remove Admin" },
+			submit: { type: "plain_text", text: "Remove" },
+			close: { type: "plain_text", text: "Cancel" },
+			callback_id: "remove_admin_submit",
+			blocks: [
+				{
+					type: "input",
+					block_id: "admin_id_block",
+					label: { type: "plain_text", text: "Slack User ID to Remove" },
+					element: {
+						type: "static_select",
+						action_id: "admin_id_select",
+						options: settings?.adminSlackIds.map(id => ({
+							text: { type: "plain_text", text: id },
+							value: id
+						})) || []
+					}
+				}
+			]
+		}
+	});
+});
+
+app.view("remove_admin_submit", async ({ ack, body, view, client }) => {
+	await ack();
+	const slackId = body.user.id;
+	const selected = view.state.values.admin_id_block.admin_id_select.selected_option;
+	const removeId = selected ? selected.value : undefined;
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	if (settings && removeId && settings.adminSlackIds.includes(removeId)) {
+		await prisma.settings.update({
+			where: { id: 1 },
+			data: { adminSlackIds: { set: settings.adminSlackIds.filter(id => id !== removeId) } }
+		});
+	}
+	const user = await prisma.user.findUnique({ where: { slackId } });
+	const blocks = await getHomeTabBlocks(user);
+	await client.views.publish({
+		user_id: slackId,
+		view: { type: "home", callback_id: "home_view", blocks }
+	});
+});
+
+// Edit Daily Free Tip Modal
+app.action("edit_daily_tip_modal", async ({ ack, body, client }) => {
+	await ack();
+	// @ts-expect-error: trigger_id is present on body
+	const trigger_id = body.trigger_id;
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	await client.views.open({
+		trigger_id,
+		view: {
+			type: "modal",
+			title: { type: "plain_text", text: "Edit Daily Tip" }, // shortened to <25 chars
+			submit: { type: "plain_text", text: "Save" },
+			close: { type: "plain_text", text: "Cancel" },
+			callback_id: "edit_daily_tip_submit",
+			blocks: [
+				{
+					type: "input",
+					block_id: "daily_tip_block",
+					label: { type: "plain_text", text: "Daily Free Tip Amount" },
+					element: {
+						type: "plain_text_input",
+						action_id: "daily_tip_input",
+						initial_value: settings?.dailyFreeTipAmount.toString() || "10"
+					}
+				}
+			]
+		}
+	});
+});
+
+app.view("edit_daily_tip_submit", async ({ ack, body, view, client }) => {
+	await ack();
+	const slackId = body.user.id;
+	const dailyTipValue = view.state.values.daily_tip_block.daily_tip_input.value;
+	const amount = Number.parseFloat(dailyTipValue ?? "");
+	if (!Number.isNaN(amount) && amount > 0) {
+		await prisma.settings.update({ where: { id: 1 }, data: { dailyFreeTipAmount: amount } });
+	}
+	const user = await prisma.user.findUnique({ where: { slackId } });
+	const blocks = await getHomeTabBlocks(user);
+	await client.views.publish({
+		user_id: slackId,
+		view: { type: "home", callback_id: "home_view", blocks }
+	});
+});
+
+// Edit Tip Amount Modal
+app.action("edit_tip_amount_modal", async ({ ack, body, client }) => {
+	await ack();
+	// @ts-expect-error: trigger_id is present on body
+	const trigger_id = body.trigger_id;
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	await client.views.open({
+		trigger_id,
+		view: {
+			type: "modal",
+			title: { type: "plain_text", text: "Edit Tip Amount" },
+			submit: { type: "plain_text", text: "Save" },
+			close: { type: "plain_text", text: "Cancel" },
+			callback_id: "edit_tip_amount_submit",
+			blocks: [
+				{
+					type: "input",
+					block_id: "tip_amount_block",
+					label: { type: "plain_text", text: "Tip Amount" },
+					element: {
+						type: "plain_text_input",
+						action_id: "tip_amount_input",
+						initial_value: settings?.tipAmount.toString() || "0.01"
+					}
+				}
+			]
+		}
+	});
+});
+
+app.view("edit_tip_amount_submit", async ({ ack, body, view, client }) => {
+	await ack();
+	const slackId = body.user.id;
+	const tipAmountValue = view.state.values.tip_amount_block.tip_amount_input.value;
+	const amount = Number.parseFloat(tipAmountValue ?? "");
+	if (!Number.isNaN(amount) && amount > 0) {
+		await prisma.settings.update({ where: { id: 1 }, data: { tipAmount: amount } });
+	}
+	const user = await prisma.user.findUnique({ where: { slackId } });
+	const blocks = await getHomeTabBlocks(user);
+	await client.views.publish({
+		user_id: slackId,
+		view: { type: "home", callback_id: "home_view", blocks }
+	});
 });
