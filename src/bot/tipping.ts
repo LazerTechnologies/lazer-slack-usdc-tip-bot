@@ -126,6 +126,12 @@ async function processBlockchainTip({
 			lastTipDate: new Date(),
 		},
 	});
+	const tipsGivenToday = (tipper.tipsGivenToday ?? 0) + 1;
+	const hasFreeTips = tipsGivenToday < DAILY_TIP_LIMIT;
+	const tipsLeft = DAILY_TIP_LIMIT - tipsGivenToday;
+	const hasExtraBalance = tipper.extraBalance?.gte(TIP_AMOUNT);
+	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(TIP_AMOUNT) : new Decimal(0);
+
 	blockchainQueue.add(async () => {
 		try {
 			const amount = BigInt(TIP_AMOUNT.mul(1e6).toFixed(0));
@@ -159,6 +165,15 @@ async function processBlockchainTip({
 				recipient.slackId,
 				`🎉 You just received a tip from <@${tipper.slackId}>!\nAmount: 0.01 USDC\nView transaction: ${basecanUrl}\nYou have ${tipsLeft} free tips left to give today.\nCheck your Home tab for your updated balance.`,
 			);
+
+			// DM the tipper with confirmation and block explorer link
+			let tipperMsg = `✅ You tipped <@${recipient.slackId}> 0.01 USDC!\nView transaction: ${basecanUrl}`;
+			if (hasFreeTips) {
+				tipperMsg += `\nYou have ${tipsLeft} free tips left today.`;
+			} else {
+				tipperMsg += `\nYou have $${extraBalanceLeft.toFixed(2)} extra balance left.`;
+			}
+			await sendDM(client, tipper.slackId, tipperMsg);
 		} catch (err) {
 			await sendDM(
 				client,
@@ -207,6 +222,23 @@ async function processInternalTip({
 		recipient.slackId,
 		`🎉 You just received a tip from <@${tipper.slackId}>!\nAmount: 0.01 USDC\nYou have ${tipsLeft} free tips left to give today.\nCheck your Home tab for your updated balance.`,
 	);
+
+	// DM the tipper with confirmation and quota/balance info
+	const tipperTipsGiven = (tipper.tipsGivenToday ?? 0) + 1;
+	const hasFreeTips = tipperTipsGiven < DAILY_TIP_LIMIT;
+	const tipsLeftTipper = DAILY_TIP_LIMIT - tipperTipsGiven;
+	const hasExtraBalance = tipper.extraBalance?.gte(TIP_AMOUNT);
+	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(TIP_AMOUNT) : new Decimal(0);
+	let tipperMsg = `✅ You tipped <@${recipient.slackId}> 0.01 USDC!`;
+
+	tipperMsg += `\nNote: <@${recipient.slackId}> does not have a withdrawal address set up yet. Their tip will be credited to their internal balance and sent on-chain when they add an address.`;
+
+	if (hasFreeTips) {
+		tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today.`;
+	} else {
+		tipperMsg += `\nYou have $${extraBalanceLeft.toFixed(2)} extra balance left.`;
+	}
+	await sendDM(client, tipper.slackId, tipperMsg);
 }
 
 // --- Main Event Handler ---
