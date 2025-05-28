@@ -3,6 +3,7 @@ import './bot/tipping';
 import './bot/withdrawal';
 import './bot/deposit';
 import './bot/update';
+import './bot/homeTab';
 
 const port = process.env.PORT || 3000;
 
