@@ -11,9 +11,6 @@ import { blockchainQueue } from "../blockchain/tx-queue.ts";
 import type { Prisma, User, Tip } from "../generated/index.d.ts";
 import type { WebClient } from "@slack/web-api";
 
-const TIP_AMOUNT = new Decimal(0.01);
-const DAILY_TIP_LIMIT = 10;
-
 // Helper to send a DM to a user (for tip notifications and critical alerts only)
 async function sendDM(client: WebClient, userId: string, text: string) {
 	const dm = await client.conversations.open({ users: userId });
@@ -76,19 +73,27 @@ async function resetDailyTipIfNeeded(
 	return user.tipsGivenToday;
 }
 
-function hasTipQuota(tipsGivenToday: number, extraBalance: Prisma.Decimal) {
-	const hasFreeTips = tipsGivenToday < DAILY_TIP_LIMIT;
-	const hasExtraBalance = extraBalance?.gte(TIP_AMOUNT);
+// Helper to fetch settings from DB
+async function getSettings() {
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	if (!settings) throw new Error("Settings not found in DB");
+	return settings;
+}
+
+function hasTipQuota(tipsGivenToday: number, extraBalance: Prisma.Decimal, dailyTipLimit: number, tipAmount: Decimal) {
+	const hasFreeTips = tipsGivenToday < dailyTipLimit;
+	const hasExtraBalance = extraBalance?.gte(tipAmount);
 	return { hasFreeTips, hasExtraBalance };
 }
 
 async function deductExtraBalance(
 	prismaTx: Prisma.TransactionClient,
 	user: User,
+	tipAmount: Decimal,
 ) {
 	await prismaTx.user.update({
 		where: { id: user.id },
-		data: { extraBalance: { decrement: TIP_AMOUNT } },
+		data: { extraBalance: { decrement: tipAmount } },
 	});
 }
 
@@ -99,6 +104,8 @@ interface TipContext {
 	recipient: User;
 	messageTs: string;
 	channelId: string;
+	tipAmount: Decimal;
+	dailyTipLimit: number;
 }
 
 async function processBlockchainTip({
@@ -108,12 +115,14 @@ async function processBlockchainTip({
 	recipient,
 	messageTs,
 	channelId,
+	tipAmount,
+	dailyTipLimit,
 }: TipContext) {
 	const tip = await prismaTx.tip.create({
 		data: {
 			fromUserId: tipper.id,
 			toUserId: recipient.id,
-			amount: TIP_AMOUNT,
+			amount: tipAmount,
 			messageTs,
 			channelId,
 			hash: null,
@@ -127,25 +136,25 @@ async function processBlockchainTip({
 		},
 	});
 	const tipsGivenToday = (tipper.tipsGivenToday ?? 0) + 1;
-	const hasFreeTips = tipsGivenToday < DAILY_TIP_LIMIT;
-	const tipsLeft = DAILY_TIP_LIMIT - tipsGivenToday;
-	const hasExtraBalance = tipper.extraBalance?.gte(TIP_AMOUNT);
-	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(TIP_AMOUNT) : new Decimal(0);
+	const hasFreeTips = tipsGivenToday < dailyTipLimit;
+	const tipsLeft = dailyTipLimit - tipsGivenToday;
+	const hasExtraBalance = tipper.extraBalance?.gte(tipAmount);
+	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(tipAmount) : new Decimal(0);
 
 	blockchainQueue.add(async () => {
 		try {
-			const amount = BigInt(TIP_AMOUNT.mul(1e6).toFixed(0));
+			const amount = BigInt(tipAmount.mul(1e6).toFixed(0));
 			const to = recipient.ethAddress as `0x${string}`;
 			const adminBalance = await getUSDCBalance(adminAccount.address);
 			if (adminBalance < amount) {
 				await sendDM(
 					client,
 					tipper.slackId,
-					`You tipped <@${recipient.slackId}> 0.01 USDC! (Insufficient on-chain balance, credited to internal balance)`,
+					`You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC! (Insufficient on-chain balance, credited to internal balance)`,
 				);
 				await prisma.user.update({
 					where: { id: recipient.id },
-					data: { balance: { increment: TIP_AMOUNT } },
+					data: { balance: { increment: tipAmount } },
 				});
 				return;
 			}
@@ -158,8 +167,7 @@ async function processBlockchainTip({
 			const basecanUrl = `https://basescan.org/tx/${hash}`;
 
 			// Calculate recipient's free tips left today (on-chain tips are always after increment, so +1)
-			const DAILY_TIP_LIMIT = 10;
-			const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1));
+			const tipsLeft = Math.max(0, dailyTipLimit - ((recipient.tipsGivenToday ?? 0) + 1));
 			await sendDM(
 				client,
 				recipient.slackId,
@@ -167,7 +175,7 @@ async function processBlockchainTip({
 			);
 
 			// DM the tipper with confirmation and block explorer link
-			let tipperMsg = `✅ You tipped <@${recipient.slackId}> 0.01 USDC!\nView transaction: ${basecanUrl}`;
+			let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!\nView transaction: ${basecanUrl}`;
 			if (hasFreeTips) {
 				tipperMsg += `\nYou have ${tipsLeft} free tips left today.`;
 			} else {
@@ -192,16 +200,18 @@ async function processInternalTip({
 	recipient,
 	messageTs,
 	channelId,
+	tipAmount,
+	dailyTipLimit,
 }: TipContext) {
 	await prismaTx.user.update({
 		where: { id: recipient.id },
-		data: { balance: { increment: TIP_AMOUNT } },
+		data: { balance: { increment: tipAmount } },
 	});
 	await prismaTx.tip.create({
 		data: {
 			fromUserId: tipper.id,
 			toUserId: recipient.id,
-			amount: TIP_AMOUNT,
+			amount: tipAmount,
 			messageTs,
 			channelId,
 		},
@@ -215,8 +225,7 @@ async function processInternalTip({
 	});
 
 	// Calculate recipient's free tips left today
-	const DAILY_TIP_LIMIT = 10;
-	const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - ((recipient.tipsGivenToday ?? 0) + 1));
+	const tipsLeft = Math.max(0, dailyTipLimit - ((recipient.tipsGivenToday ?? 0) + 1));
 	await sendDM(
 		client,
 		recipient.slackId,
@@ -225,11 +234,11 @@ async function processInternalTip({
 
 	// DM the tipper with confirmation and quota/balance info
 	const tipperTipsGiven = (tipper.tipsGivenToday ?? 0) + 1;
-	const hasFreeTips = tipperTipsGiven < DAILY_TIP_LIMIT;
-	const tipsLeftTipper = Math.max(0, DAILY_TIP_LIMIT - tipperTipsGiven);
-	const hasExtraBalance = tipper.extraBalance?.gte(TIP_AMOUNT);
-	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(TIP_AMOUNT) : new Decimal(0);
-	let tipperMsg = `✅ You tipped <@${recipient.slackId}> 0.01 USDC!`;
+	const hasFreeTips = tipperTipsGiven < dailyTipLimit;
+	const tipsLeftTipper = Math.max(0, dailyTipLimit - tipperTipsGiven);
+	const hasExtraBalance = tipper.extraBalance?.gte(tipAmount);
+	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(tipAmount) : new Decimal(0);
+	let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!`;
 
 	tipperMsg += `\nNote: <@${recipient.slackId}> does not have a withdrawal address set up yet. Their tip will be credited to their internal balance and sent on-chain when they add an address.`;
 
@@ -255,8 +264,12 @@ app.event("reaction_added", async ({ event, client }) => {
 	const recipientSlackId = event.item_user;
 	if (!recipientSlackId) return;
 
+	const settings = await getSettings();
+	const tipAmount = new Decimal(settings.tipAmount);
+	const dailyTipLimit = Number(settings.dailyFreeTipAmount);
+
 	await prisma.$transaction(async (prismaTx: Prisma.TransactionClient) => {
-		if (await isSelfTip(tipperSlackId, recipientSlackId)) {
+		if (isSelfTip(tipperSlackId, recipientSlackId)) {
 			await sendDM(client, tipperSlackId, "You can't tip yourself!");
 			return;
 		}
@@ -275,6 +288,8 @@ app.event("reaction_added", async ({ event, client }) => {
 		const { hasFreeTips, hasExtraBalance } = hasTipQuota(
 			tipsGivenToday,
 			tipper.extraBalance,
+			dailyTipLimit,
+			tipAmount,
 		);
 		if (!hasFreeTips && !hasExtraBalance) {
 			await sendDM(
@@ -285,7 +300,7 @@ app.event("reaction_added", async ({ event, client }) => {
 			return;
 		}
 		if (!hasFreeTips && hasExtraBalance) {
-			await deductExtraBalance(prismaTx, tipper);
+			await deductExtraBalance(prismaTx, tipper, tipAmount);
 		}
 		const recipient = await getOrCreateUser(prismaTx, recipientSlackId);
 		if (recipient.ethAddress) {
@@ -296,6 +311,8 @@ app.event("reaction_added", async ({ event, client }) => {
 				recipient,
 				messageTs,
 				channelId,
+				tipAmount,
+				dailyTipLimit,
 			});
 		} else {
 			await processInternalTip({
@@ -305,6 +322,8 @@ app.event("reaction_added", async ({ event, client }) => {
 				recipient,
 				messageTs,
 				channelId,
+				tipAmount,
+				dailyTipLimit,
 			});
 		}
 	});
