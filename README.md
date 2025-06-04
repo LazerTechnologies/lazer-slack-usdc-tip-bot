@@ -2,10 +2,18 @@
 
 A Slack bot that enables users to tip each other small amounts of USDC (on Base blockchain) by reacting to messages with a dollar emoji. The bot is designed for minimal friction, privacy, and ease of use.
 
+# Self-hosting
+
+Click below to host instantly:
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/ZogUZJ?referralCode=fQRD5i)
+
+![Railway Cost Usage](./docs/usage-railway.png)
+
 ## Features
 
 - Tip other Slack users by reacting to their messages with a dollar emoji (`$` or `:dollar:`).
-- Daily free tip quota (5 x $0.01 USDC per user).
+- Configurable daily free tip quota (Y x $0.01 USDC per user).
 - Tips are held in an admin wallet until users set a withdrawal address.
 - Withdrawals: users can set their Ethereum address to receive accrued tips.
 - Optional: users can request a unique deposit address to top up their tipping balance.
