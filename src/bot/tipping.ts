@@ -166,18 +166,22 @@ async function processBlockchainTip({
 			});
 			const basecanUrl = `https://basescan.org/tx/${hash}`;
 
-			// Calculate recipient's free tips left today (on-chain tips are always after increment, so +1)
-			const tipsLeft = Math.max(0, dailyTipLimit - ((recipient.tipsGivenToday ?? 0) + 1));
+			// Fetch updated tipper and recipient after DB increments
+			const updatedTipper = await prisma.user.findUnique({ where: { id: tipper.id } });
+			const updatedRecipient = await prisma.user.findUnique({ where: { id: recipient.id } });
+
+			const tipsLeftRecipient = Math.max(0, dailyTipLimit - (updatedRecipient?.tipsGivenToday ?? 0));
 			await sendDM(
 				client,
 				recipient.slackId,
-				`🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}\nYou have ${tipsLeft} free tips left to give today.`,
+				`🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}\nYou have ${tipsLeftRecipient} free tips left to give today.`,
 			);
 
 			// DM the tipper with confirmation and block explorer link
+			const tipsLeftTipper = Math.max(0, dailyTipLimit - (updatedTipper?.tipsGivenToday ?? 0));
 			let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!\nView transaction: ${basecanUrl}`;
-			if (hasFreeTips) {
-				tipperMsg += `\nYou have ${tipsLeft} free tips left today.`;
+			if (tipsLeftTipper > 0) {
+				tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today.`;
 			} else {
 				tipperMsg += `\nYou have $${extraBalanceLeft.toFixed(2)} extra balance left.`;
 			}
