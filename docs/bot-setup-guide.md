@@ -1,6 +1,6 @@
 # Setup
 
-Go to https://api.slack.com/apps and create a new Slack app. Choose "From scratch" and give it a name and workspace. You can either copy the manifest below or configure the app manually in the Slack UI.
+Go to https://api.slack.com/apps and create a new Slack app. Click "Create New App" and then "From Manifest". You can either copy the manifest below or configure the app manually in the Slack UI.
 
 You can copy and paste the following manifest to quickly set up the app:
 
