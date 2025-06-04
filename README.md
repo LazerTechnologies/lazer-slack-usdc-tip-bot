@@ -14,7 +14,7 @@ Click below to host instantly:
 
 ## Features
 
-- Tip other Slack users by reacting to their messages with a dollar emoji (`$` or `:dollar:`).
+- Tip other Slack users by reacting to their messages with a dollar emoji (`:dollar:` === 💵).
 - Configurable daily free tip quota (Y x $0.01 USDC per user).
 - Tips are held in an admin wallet until users set a withdrawal address.
 - Withdrawals: users can set their Ethereum address to receive accrued tips.
