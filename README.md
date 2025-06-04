@@ -24,6 +24,7 @@ Click below to host instantly:
 - USDC transfers use EIP-3009 for gasless transactions (no ETH required).
 - Minimal Slack permissions and privacy-focused design.
 
+Each user has their own bot home tab where they can see their tipping balance, set their withdrawal address, and view their tipping history.
 ![Bot Home Screen](./docs/home-screen.png)
 
 ## Tech Stack
