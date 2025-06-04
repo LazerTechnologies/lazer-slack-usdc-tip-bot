@@ -142,6 +142,26 @@ async function processBlockchainTip({
 	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(tipAmount) : new Decimal(0);
 
 	blockchainQueue.add(async () => {
+		// Re-fetch tipper to check up-to-date quota and extraBalance
+		const latestTipper = await prisma.user.findUnique({ where: { id: tipper.id } });
+		if (!latestTipper) {
+			await sendDM(client, tipper.slackId, "Tip failed: user not found.");
+			return;
+		}
+		const tipsGivenToday = latestTipper.tipsGivenToday ?? 0;
+		const hasFreeTips = tipsGivenToday < dailyTipLimit;
+		const hasExtraBalance = latestTipper.extraBalance?.gte(tipAmount);
+		if (!hasFreeTips && !hasExtraBalance) {
+			await sendDM(client, tipper.slackId, "Tip failed: You've reached your daily free tip limit and have no extra balance left!");
+			return;
+		}
+		if (!hasFreeTips && hasExtraBalance) {
+			// Deduct extraBalance atomically
+			await prisma.user.update({
+				where: { id: tipper.id },
+				data: { extraBalance: { decrement: tipAmount } },
+			});
+		}
 		try {
 			const amount = BigInt(tipAmount.mul(1e6).toFixed(0));
 			const to = recipient.ethAddress as `0x${string}`;
@@ -171,20 +191,18 @@ async function processBlockchainTip({
 			const updatedRecipient = await prisma.user.findUnique({ where: { id: recipient.id } });
 
 			const tipsLeftRecipient = Math.max(0, dailyTipLimit - (updatedRecipient?.tipsGivenToday ?? 0));
+			const extraBalanceRecipient = updatedRecipient?.extraBalance?.toFixed(2) ?? "0.00";
 			await sendDM(
 				client,
 				recipient.slackId,
-				`🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}\nYou have ${tipsLeftRecipient} free tips left to give today.`,
+				`🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}\nYou have ${tipsLeftRecipient} free tips left to give today and $${extraBalanceRecipient} extra balance left.`,
 			);
 
 			// DM the tipper with confirmation and block explorer link
 			const tipsLeftTipper = Math.max(0, dailyTipLimit - (updatedTipper?.tipsGivenToday ?? 0));
+			const extraBalanceTipper = updatedTipper?.extraBalance?.toFixed(2) ?? "0.00";
 			let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!\nView transaction: ${basecanUrl}`;
-			if (tipsLeftTipper > 0) {
-				tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today.`;
-			} else {
-				tipperMsg += `\nYou have $${extraBalanceLeft.toFixed(2)} extra balance left.`;
-			}
+			tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today and $${extraBalanceTipper} extra balance left.`;
 			await sendDM(client, tipper.slackId, tipperMsg);
 		} catch (err) {
 			await sendDM(
