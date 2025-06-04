@@ -1,6 +1,8 @@
 # Slack Tipping Bot
 
-A Slack bot that enables users to tip each other small amounts of USDC (on Base blockchain) by reacting to messages with a dollar emoji. The bot is designed for minimal friction, privacy, and ease of use.
+A Slack bot that enables users to tip each other small amounts of USDC (on Base blockchain) by reacting to messages with a dollar emoji 💵. The bot is designed for minimal friction, privacy, and ease of use.
+
+![Tip received](./docs/tip-received.png)
 
 # Self-hosting & Bot Setup
 
@@ -21,6 +23,8 @@ Click below to host instantly:
 - Optional: users can request a unique deposit address to top up their tipping balance.
 - USDC transfers use EIP-3009 for gasless transactions (no ETH required).
 - Minimal Slack permissions and privacy-focused design.
+
+![Bot Home Screen](./docs/home-screen.png)
 
 ## Tech Stack
 
