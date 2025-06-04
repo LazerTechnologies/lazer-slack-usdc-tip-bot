@@ -52,6 +52,10 @@ You can copy and paste the following manifest to quickly set up the app:
 }
 ```
 
+Once your app is created, install it to your workspace. Remember you need to fund the admin wallet with some Base USDC or ETH to pay for gas fees when users tip each other.
+
+## Manual Setup Steps
+
 Create an app-level token with the `connections:write` scope and enable Socket Mode in your Slack app settings. This allows the bot to connect to Slack without needing a bot token.
 ![App token](./app-token.png)
 ![Socket mode](./socket-mode.png)
