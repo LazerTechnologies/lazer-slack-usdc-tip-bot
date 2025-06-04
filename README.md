@@ -4,6 +4,8 @@ A Slack bot that enables users to tip each other small amounts of USDC (on Base 
 
 # Self-hosting
 
+[Bot setup guide](./docs/bot-setup-guide.md)
+
 Click below to host instantly:
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/ZogUZJ?referralCode=fQRD5i)
