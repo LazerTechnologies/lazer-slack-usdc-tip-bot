@@ -2,7 +2,7 @@
 
 A Slack bot that enables users to tip each other small amounts of USDC (on Base blockchain) by reacting to messages with a dollar emoji. The bot is designed for minimal friction, privacy, and ease of use.
 
-# Self-hosting
+# Self-hosting & Bot Setup
 
 [Bot setup guide](./docs/bot-setup-guide.md)
 
