@@ -135,11 +135,6 @@ async function processBlockchainTip({
 			lastTipDate: new Date(),
 		},
 	});
-	const tipsGivenToday = (tipper.tipsGivenToday ?? 0) + 1;
-	const hasFreeTips = tipsGivenToday < dailyTipLimit;
-	const tipsLeft = dailyTipLimit - tipsGivenToday;
-	const hasExtraBalance = tipper.extraBalance?.gte(tipAmount);
-	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(tipAmount) : new Decimal(0);
 
 	blockchainQueue.add(async () => {
 		// Re-fetch tipper to check up-to-date quota and extraBalance
@@ -247,28 +242,26 @@ async function processInternalTip({
 	});
 
 	// Calculate recipient's free tips left today
-	const tipsLeft = Math.max(0, dailyTipLimit - ((recipient.tipsGivenToday ?? 0) + 1));
+	const recipientTipsGiven = recipient.tipsGivenToday ?? 0;
+	const tipsLeft = Math.max(0, dailyTipLimit - recipientTipsGiven);
 	await sendDM(
 		client,
 		recipient.slackId,
 		`🎉 You just received a tip from <@${tipper.slackId}>!\nYou have ${tipsLeft} free tips left to give today.`,
 	);
 
+	// Fetch updated tipper data for accurate counts
+	const updatedTipper = await prismaTx.user.findUnique({ where: { id: tipper.id } });
+	if (!updatedTipper) return;
+	
 	// DM the tipper with confirmation and quota/balance info
-	const tipperTipsGiven = (tipper.tipsGivenToday ?? 0) + 1;
-	const hasFreeTips = tipperTipsGiven < dailyTipLimit;
+	const tipperTipsGiven = updatedTipper.tipsGivenToday ?? 0;
 	const tipsLeftTipper = Math.max(0, dailyTipLimit - tipperTipsGiven);
-	const hasExtraBalance = tipper.extraBalance?.gte(tipAmount);
-	const extraBalanceLeft = hasExtraBalance ? tipper.extraBalance.sub(tipAmount) : new Decimal(0);
 	let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!`;
 
 	tipperMsg += `\nNote: <@${recipient.slackId}> does not have a withdrawal address set up yet. Their tip will be credited to their internal balance and sent on-chain when they add an address.`;
 
-	if (hasFreeTips) {
-		tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today.`;
-	} else {
-		tipperMsg += `\nYou have $${extraBalanceLeft.toFixed(2)} extra balance left.`;
-	}
+	tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today and $${updatedTipper.extraBalance.toFixed(2)} extra balance left.`;
 	await sendDM(client, tipper.slackId, tipperMsg);
 }
 

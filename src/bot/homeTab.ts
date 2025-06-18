@@ -16,6 +16,9 @@ import type { ActionsBlockElement } from '@slack/types';
 
 // Helper to build Home Tab blocks dynamically
 async function getHomeTabBlocks(user: UserType | null) {
+	// --- Admin Settings ---
+	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+	
 	// --- Global Stats ---
 	// Total amount of tips ever given
 	const totalTipsAgg = await prisma.tip.aggregate({ _sum: { amount: true } });
@@ -66,7 +69,7 @@ async function getHomeTabBlocks(user: UserType | null) {
 	const extraBalance = user ? user.extraBalance.toString() : "0";
 	const depositAddress = user?.depositAddress || "Not set";
 	const withdrawalAddress = user?.ethAddress || "Not set";
-	const DAILY_TIP_LIMIT = 10;
+	const DAILY_TIP_LIMIT = settings?.dailyFreeTipAmount.toNumber() ?? 10;
 	const tipsGivenToday = user?.tipsGivenToday ?? 0;
 	const tipsLeft = Math.max(0, DAILY_TIP_LIMIT - tipsGivenToday);
 	const actions: ActionsBlockElement[] = [];
@@ -178,7 +181,6 @@ async function getHomeTabBlocks(user: UserType | null) {
 	const resetTimeLocal = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 	// --- Admin Settings ---
-	const settings = await prisma.settings.findUnique({ where: { id: 1 } });
 	const isAdmin = user && settings && settings.adminSlackIds.includes(user.slackId);
 
 	const blocks: KnownBlock[] = [
