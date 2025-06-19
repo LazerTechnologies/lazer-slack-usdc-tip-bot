@@ -174,11 +174,11 @@ async function processBlockchainTip({
 			const to = recipient.ethAddress as `0x${string}`;
 			const adminBalance = await getUSDCBalance(adminAccount.address);
 			if (adminBalance < amount) {
-				await sendDM(
-					client,
-					tipper.slackId,
-					`You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC! (Insufficient on-chain balance, credited to internal balance)`,
-				);
+				let tipperMsg = `You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC! (Insufficient on-chain balance, credited to internal balance)`;
+				if (messageLink) {
+					tipperMsg += `\nSee the message: ${messageLink}`;
+				}
+				await sendDM(client, tipper.slackId, tipperMsg);
 				
 				// Send notification to recipient with link
 				let recipientMsg = `🎉 You just received a tip from <@${tipper.slackId}>! (Credited to internal balance)`;
@@ -218,6 +218,9 @@ async function processBlockchainTip({
 			const tipsLeftTipper = Math.max(0, dailyTipLimit - (updatedTipper?.tipsGivenToday ?? 0));
 			const extraBalanceTipper = updatedTipper?.extraBalance?.toFixed(2) ?? "0.00";
 			let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!\nView transaction: ${basecanUrl}`;
+			if (messageLink) {
+				tipperMsg += `\nSee the message: ${messageLink}`;
+			}
 			tipperMsg += `\nYou have ${tipsLeftTipper} free tips left today and $${extraBalanceTipper} extra balance left.`;
 			await sendDM(client, tipper.slackId, tipperMsg);
 		} catch (err) {
@@ -292,6 +295,9 @@ async function processInternalTip({
 	const tipperTipsGiven = updatedTipper.tipsGivenToday ?? 0;
 	const tipsLeftTipper = Math.max(0, dailyTipLimit - tipperTipsGiven);
 	let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!`;
+	if (messageLink) {
+		tipperMsg += `\nSee the message: ${messageLink}`;
+	}
 
 	tipperMsg += `\nNote: <@${recipient.slackId}> does not have a withdrawal address set up yet. Their tip will be credited to their internal balance and sent on-chain when they add an address.`;
 
