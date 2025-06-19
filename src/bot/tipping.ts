@@ -137,6 +137,18 @@ async function processBlockchainTip({
 	});
 
 	blockchainQueue.add(async () => {
+		// Get permalink to the original message once at the beginning
+		let messageLink = "";
+		try {
+			const permalink = await client.chat.getPermalink({
+				channel: channelId,
+				message_ts: messageTs,
+			});
+			messageLink = permalink.permalink || "";
+		} catch (err) {
+			console.error("[TIP] Failed to get permalink", { err, channelId, messageTs });
+		}
+
 		// Re-fetch tipper to check up-to-date quota and extraBalance
 		const latestTipper = await prisma.user.findUnique({ where: { id: tipper.id } });
 		if (!latestTipper) {
@@ -167,6 +179,14 @@ async function processBlockchainTip({
 					tipper.slackId,
 					`You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC! (Insufficient on-chain balance, credited to internal balance)`,
 				);
+				
+				// Send notification to recipient with link
+				let recipientMsg = `🎉 You just received a tip from <@${tipper.slackId}>! (Credited to internal balance)`;
+				if (messageLink) {
+					recipientMsg += `\nSee the message: ${messageLink}`;
+				}
+				await sendDM(client, recipient.slackId, recipientMsg);
+
 				await prisma.user.update({
 					where: { id: recipient.id },
 					data: { balance: { increment: tipAmount } },
@@ -187,11 +207,12 @@ async function processBlockchainTip({
 
 			const tipsLeftRecipient = Math.max(0, dailyTipLimit - (updatedRecipient?.tipsGivenToday ?? 0));
 			const extraBalanceRecipient = updatedRecipient?.extraBalance?.toFixed(2) ?? "0.00";
-			await sendDM(
-				client,
-				recipient.slackId,
-				`🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}\nYou have ${tipsLeftRecipient} free tips left to give today and $${extraBalanceRecipient} extra balance left.`,
-			);
+			let recipientMsg = `🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}`;
+			if (messageLink) {
+				recipientMsg += `\nSee the message: ${messageLink}`;
+			}
+			recipientMsg += `\nYou have ${tipsLeftRecipient} free tips left to give today and $${extraBalanceRecipient} extra balance left.`;
+			await sendDM(client, recipient.slackId, recipientMsg);
 
 			// DM the tipper with confirmation and block explorer link
 			const tipsLeftTipper = Math.max(0, dailyTipLimit - (updatedTipper?.tipsGivenToday ?? 0));
@@ -241,14 +262,27 @@ async function processInternalTip({
 		},
 	});
 
+	// Get permalink to the original message
+	let messageLink = "";
+	try {
+		const permalink = await client.chat.getPermalink({
+			channel: channelId,
+			message_ts: messageTs,
+		});
+		messageLink = permalink.permalink || "";
+	} catch (err) {
+		console.error("[TIP] Failed to get permalink", { err, channelId, messageTs });
+	}
+
 	// Calculate recipient's free tips left today
 	const recipientTipsGiven = recipient.tipsGivenToday ?? 0;
 	const tipsLeft = Math.max(0, dailyTipLimit - recipientTipsGiven);
-	await sendDM(
-		client,
-		recipient.slackId,
-		`🎉 You just received a tip from <@${tipper.slackId}>!\nYou have ${tipsLeft} free tips left to give today.`,
-	);
+	let recipientMsg = `🎉 You just received a tip from <@${tipper.slackId}>!`;
+	if (messageLink) {
+		recipientMsg += `\nSee the message: ${messageLink}`;
+	}
+	recipientMsg += `\nYou have ${tipsLeft} free tips left to give today.`;
+	await sendDM(client, recipient.slackId, recipientMsg);
 
 	// Fetch updated tipper data for accurate counts
 	const updatedTipper = await prismaTx.user.findUnique({ where: { id: tipper.id } });
