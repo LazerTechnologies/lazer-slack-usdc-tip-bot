@@ -340,20 +340,9 @@ async function processInternalTip({
 
 // --- Main Event Handlers ---
 
-// TEST: General catch-all message handler to verify message events are working
-app.message(async ({ message, say }) => {
-	console.log("[TEST] Catch-all message handler triggered:", {
-		text: ("text" in message) ? message.text : "no text",
-		user: ("user" in message) ? message.user : "no user",
-		channel: message.channel,
-		subtype: message.subtype,
-		ts: message.ts,
-	});
-});
-
 // Handle direct tips via messages like "@username 💵"
 // Use a regex pattern to match messages containing user mentions followed by 💵
-app.message(/<@[A-Z0-9]+>\s*(?:💵|\$)/, async ({ message, context, client }) => {
+app.message(/<@[A-Z0-9]+>\s*(?:💵|\$|:dollar:)/, async ({ message, context, client }) => {
 	// Only process messages with text content
 	if (!("text" in message) || !message.text) return;
 
@@ -375,7 +364,7 @@ app.message(/<@[A-Z0-9]+>\s*(?:💵|\$)/, async ({ message, context, client }) =
 	});
 
 	// Check if message contains @mention followed by 💵
-	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$)/g;
+	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
 	const matches = [...message.text.matchAll(tipPattern)];
 
 	console.log("[TIP] Pattern matches found:", matches.length, matches);
@@ -504,7 +493,7 @@ app.event("reaction_added", async ({ event, client }) => {
 			const message = result.messages[0];
 			if (message.text) {
 				// Check if message contains @mention followed by 💵
-				const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$)/g;
+				const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
 				const matches = [...message.text.matchAll(tipPattern)];
 
 				if (matches.length > 0) {
