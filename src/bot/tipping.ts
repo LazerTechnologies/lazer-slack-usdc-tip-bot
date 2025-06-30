@@ -473,6 +473,15 @@ app.event("reaction_added", async ({ event, client }) => {
 	const messageAuthorSlackId = event.item_user;
 	if (!messageAuthorSlackId) return;
 
+	console.log("[TIP] Reaction event details:", {
+		tipperSlackId,
+		messageTs,
+		channelId,
+		messageAuthorSlackId,
+		itemType: event.item.type,
+		reaction: event.reaction,
+	});
+
 	const settings = await getSettings();
 	const tipAmount = new Decimal(settings.tipAmount);
 	const dailyTipLimit = Number(settings.dailyFreeTipAmount);
@@ -481,26 +490,60 @@ app.event("reaction_added", async ({ event, client }) => {
 	let recipientsToTip: string[] = [];
 
 	try {
-		// Fetch the message to check for @mention tips
-		const result = await client.conversations.history({
-			channel: channelId,
-			latest: messageTs,
-			limit: 1,
-			inclusive: true,
+		// For thread messages, we need to check if this is a thread reply
+		const isThreadReply = messageTs.includes('.');
+		let message: { ts?: string; text?: string; } | undefined;
+
+		if (isThreadReply) {
+			// For thread replies, we need to use conversations.replies
+			const threadTs = `${messageTs.split('.')[0]}.${messageTs.split('.')[1].substring(0, 6)}`;
+			console.log("[TIP] Fetching thread message:", { messageTs, threadTs, channelId });
+			
+			const result = await client.conversations.replies({
+				channel: channelId,
+				ts: threadTs,
+				latest: messageTs,
+				limit: 1,
+				inclusive: true,
+			});
+
+			// Find the exact message by timestamp
+			message = result.messages?.find(m => m.ts === messageTs);
+		} else {
+			// For regular channel messages, use conversations.history
+			const result = await client.conversations.history({
+				channel: channelId,
+				latest: messageTs,
+				limit: 1,
+				inclusive: true,
+			});
+			message = result.messages?.[0];
+		}
+
+		console.log("[TIP] Fetched message for reaction:", {
+			messageTs,
+			channelId,
+			found: !!message,
+			fetchedTs: message?.ts,
+			text: message?.text?.substring(0, 50),
 		});
 
-		if (result.messages && result.messages.length > 0) {
-			const message = result.messages[0];
-			if (message.text) {
-				// Check if message contains @mention followed by 💵
-				const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
-				const matches = [...message.text.matchAll(tipPattern)];
+		if (message && message.ts === messageTs && message.text) {
+			// Check if message contains @mention followed by 💵
+			const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
+			const matches = [...message.text.matchAll(tipPattern)];
 
-				if (matches.length > 0) {
-					// If there are @mention tips, tip those users instead
-					recipientsToTip = matches.map((match) => match[1]);
-				}
+			if (matches.length > 0) {
+				// If there are @mention tips, tip those users instead
+				recipientsToTip = matches.map((match) => match[1]);
+				console.log("[TIP] Found @mention tips in message:", recipientsToTip);
 			}
+		} else if (message) {
+			console.warn("[TIP] Message timestamp mismatch or no text:", {
+				expected: messageTs,
+				received: message?.ts,
+				hasText: !!message?.text,
+			});
 		}
 	} catch (err) {
 		console.error("[TIP] Failed to fetch message for reaction", {
