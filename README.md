@@ -11,12 +11,13 @@ A Slack bot that enables users to tip each other small amounts of USDC (on Base 
 Click below to host instantly:
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/ZogUZJ?referralCode=fQRD5i)
-
 ![Railway Cost Usage](./docs/usage-railway.png)
 
 ## Features
 
-- Tip other Slack users by reacting to their messages with a dollar emoji (`:dollar:` === 💵).
+- **Two ways to tip:**
+  - React to any message with a dollar emoji (`:dollar:` === 💵) to tip the author
+  - Send a message with `@username 💵` to tip someone directly
 - Configurable daily free tip quota (Y x $0.01 USDC per user).
 - Tips are held in an admin wallet until users set a withdrawal address.
 - Withdrawals: users can set their Ethereum address to receive accrued tips.
@@ -26,6 +27,48 @@ Click below to host instantly:
 
 Each user has their own bot home tab where they can see their tipping balance, set their withdrawal address, and view their tipping history.
 ![Bot Home Screen](./docs/home-screen.png)
+
+## How to Tip
+
+### Method 1: Reaction Tipping (Simple)
+React to any message with the dollar emoji:
+- `:dollar:` or 💵 or `$`
+- Tips go to the message author
+- **Exception:** If the message contains `@someone 💵`, your reaction tips @someone instead
+
+### Method 2: Direct Tipping (Advanced)
+Send a message mentioning users with the dollar emoji:
+
+**Single tip:**
+```
+@alice 💵 Great job on the presentation!
+```
+
+**Multiple tips in one message:**
+```
+@alice 💵 @bob $ awesome teamwork you two!
+```
+
+**Mixed with regular conversation:**
+```
+Thanks for the help @alice 💵 and @bob :dollar: - you saved the day!
+```
+
+**Valid emoji formats:**
+- `💵` (actual emoji)
+- `:dollar:` (emoji shortcode) 
+- `$` (dollar sign)
+
+### Example Scenarios:
+
+1. **Alice writes:** "Just shipped the new feature!"
+   **Bob reacts:** 💵 → Alice gets tipped
+
+2. **Alice writes:** "@charlie 💵 thanks for the code review"
+   **Bob reacts:** 💵 → Charlie gets tipped (not Alice!)
+
+3. **Bob writes:** "@alice 💵 @charlie $ great work on the bug fix"
+   → Alice and Charlie both get tipped by Bob
 
 ## Tech Stack
 
@@ -67,15 +110,22 @@ Each user has their own bot home tab where they can see their tipping balance, s
 
 ### 1. Tipping via Emoji Reaction
 - User reacts to a Slack message with a dollar emoji ($ or :dollar:).
+- **Special behavior:** If the message contains `@username 💵`, the tip goes to @username instead of the message author.
 - Bot checks:
   - Tipper is not tipping their own post.
   - Tipper has not exceeded their daily free tip quota (5 x $0.01 USDC).
   - Tipper is not tipping a bot or non-human account.
   - No duplicate tipping on the same message by the same user.
-- If eligible, $0.01 USDC is credited to the message author's balance (held in admin account).
+- If eligible, $0.01 USDC is credited to the recipient's balance (held in admin account).
 - If not eligible, bot sends a DM explaining why.
 
-### 2. User Withdrawal Address
+### 2. Direct Tipping via Message
+- User sends a message containing `@username 💵` (or `@username $` or `@username :dollar:`).
+- Multiple users can be tipped in one message: `@alice 💵 @bob 💵 great work team!`
+- Bot applies the same checks as reaction tipping.
+- Each mentioned user receives a tip if the sender has quota available.
+
+### 3. User Withdrawal Address
 - Users do **not** need a wallet to receive tips.
 - Tips are held in the admin account, mapped to each user's Slack ID.
 - To withdraw, a user replies to the bot with their Ethereum address.
@@ -83,12 +133,12 @@ Each user has their own bot home tab where they can see their tipping balance, s
   - All accrued USDC is sent to the user's address.
   - All future tips are sent directly to the user's address.
 
-### 3. User Deposit Address (Optional)
+### 4. User Deposit Address (Optional)
 - Users can request a unique deposit address to top up their tipping balance.
 - Deposit addresses are derived from the admin wallet using the HD standard.
 - Deposited USDC is credited to the user's tipping balance.
 
-### 4. USDC Transfers
+### 5. USDC Transfers
 - Bot uses EIP-3009 to move USDC from the admin account to user addresses without requiring ETH for gas.
 
 ## Scenarios Where Tips Are Not Sent

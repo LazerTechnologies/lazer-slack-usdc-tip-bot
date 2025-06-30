@@ -342,7 +342,7 @@ async function processInternalTip({
 
 // Handle direct tips via messages like "@username 💵"
 // Use a regex pattern to match messages containing user mentions followed by 💵
-app.message(/<@[A-Z0-9]+>\s*(?:💵|\$|:dollar:)/, async ({ message, context, client }) => {
+app.message(/<@[A-Z0-9]+>\s*(?:💵|\$|:dollar:)/, async ({ message, client }) => {
 	// Only process messages with text content
 	if (!("text" in message) || !message.text) return;
 
@@ -355,13 +355,6 @@ app.message(/<@[A-Z0-9]+>\s*(?:💵|\$|:dollar:)/, async ({ message, context, cl
 		return;
 	}
 
-	console.log("[TIP] Message received:", {
-		text: message.text,
-		user: message.user,
-		channel: message.channel,
-		ts: message.ts,
-		regexMatches: context.matches,
-	});
 
 	// Check if message contains @mention followed by 💵
 	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
