@@ -340,10 +340,20 @@ async function processInternalTip({
 
 // --- Main Event Handlers ---
 
+// TEST: General catch-all message handler to verify message events are working
+app.message(async ({ message, say }) => {
+	console.log("[TEST] Catch-all message handler triggered:", {
+		text: ("text" in message) ? message.text : "no text",
+		user: ("user" in message) ? message.user : "no user",
+		channel: message.channel,
+		subtype: message.subtype,
+		ts: message.ts,
+	});
+});
+
 // Handle direct tips via messages like "@username 💵"
-// Note: app.message() with regex might not work in all Slack Bolt versions
-// Using a general message handler instead
-app.message(async ({ message, client }) => {
+// Use a regex pattern to match messages containing user mentions followed by 💵
+app.message(/<@[A-Z0-9]+>\s*(?:💵|\$)/, async ({ message, context, client }) => {
 	// Only process messages with text content
 	if (!("text" in message) || !message.text) return;
 
@@ -356,20 +366,21 @@ app.message(async ({ message, client }) => {
 		return;
 	}
 
-	// Check if message contains @mention followed by 💵
-	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$)/g;
-	const matches = [...message.text.matchAll(tipPattern)];
-
-	// Only proceed if we found tip patterns
-	if (matches.length === 0) return;
-
-	console.log("[TIP] Message received with tip pattern:", {
+	console.log("[TIP] Message received:", {
 		text: message.text,
 		user: message.user,
 		channel: message.channel,
 		ts: message.ts,
-		matches: matches.length,
+		regexMatches: context.matches,
 	});
+
+	// Check if message contains @mention followed by 💵
+	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$)/g;
+	const matches = [...message.text.matchAll(tipPattern)];
+
+	console.log("[TIP] Pattern matches found:", matches.length, matches);
+
+	if (matches.length === 0) return;
 
 		const tipperSlackId = message.user;
 		if (!tipperSlackId) return;
