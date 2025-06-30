@@ -1,15 +1,15 @@
-import app from "./slackClient.ts";
-import prisma from "../db/prismaClient.ts";
+import { Decimal } from "@prisma/client/runtime/library";
+import type { WebClient } from "@slack/web-api";
+import { blockchainQueue } from "../blockchain/tx-queue.ts";
 import {
+	USDCContract,
 	adminAccount,
 	getUSDCBalance,
-	USDCContract,
 	publicClient,
 } from "../blockchain/wallet.ts";
-import { Decimal } from "@prisma/client/runtime/library";
-import { blockchainQueue } from "../blockchain/tx-queue.ts";
-import type { Prisma, User, Tip } from "../generated/index.d.ts";
-import type { WebClient } from "@slack/web-api";
+import prisma from "../db/prismaClient.ts";
+import type { Prisma, Tip, User } from "../generated/index.d.ts";
+import app from "./slackClient.ts";
 
 // Helper to send a DM to a user (for tip notifications and critical alerts only)
 async function sendDM(client: WebClient, userId: string, text: string) {
@@ -80,7 +80,12 @@ async function getSettings() {
 	return settings;
 }
 
-function hasTipQuota(tipsGivenToday: number, extraBalance: Prisma.Decimal, dailyTipLimit: number, tipAmount: Decimal) {
+function hasTipQuota(
+	tipsGivenToday: number,
+	extraBalance: Prisma.Decimal,
+	dailyTipLimit: number,
+	tipAmount: Decimal,
+) {
 	const hasFreeTips = tipsGivenToday < dailyTipLimit;
 	const hasExtraBalance = extraBalance?.gte(tipAmount);
 	return { hasFreeTips, hasExtraBalance };
@@ -146,11 +151,17 @@ async function processBlockchainTip({
 			});
 			messageLink = permalink.permalink || "";
 		} catch (err) {
-			console.error("[TIP] Failed to get permalink", { err, channelId, messageTs });
+			console.error("[TIP] Failed to get permalink", {
+				err,
+				channelId,
+				messageTs,
+			});
 		}
 
 		// Re-fetch tipper to check up-to-date quota and extraBalance
-		const latestTipper = await prisma.user.findUnique({ where: { id: tipper.id } });
+		const latestTipper = await prisma.user.findUnique({
+			where: { id: tipper.id },
+		});
 		if (!latestTipper) {
 			await sendDM(client, tipper.slackId, "Tip failed: user not found.");
 			return;
@@ -159,7 +170,11 @@ async function processBlockchainTip({
 		const hasFreeTips = tipsGivenToday < dailyTipLimit;
 		const hasExtraBalance = latestTipper.extraBalance?.gte(tipAmount);
 		if (!hasFreeTips && !hasExtraBalance) {
-			await sendDM(client, tipper.slackId, "Tip failed: You've reached your daily free tip limit and have no extra balance left!");
+			await sendDM(
+				client,
+				tipper.slackId,
+				"Tip failed: You've reached your daily free tip limit and have no extra balance left!",
+			);
 			return;
 		}
 		if (!hasFreeTips && hasExtraBalance) {
@@ -179,7 +194,7 @@ async function processBlockchainTip({
 					tipperMsg += `\nSee the message: ${messageLink}`;
 				}
 				await sendDM(client, tipper.slackId, tipperMsg);
-				
+
 				// Send notification to recipient with link
 				let recipientMsg = `🎉 You just received a tip from <@${tipper.slackId}>! (Credited to internal balance)`;
 				if (messageLink) {
@@ -202,11 +217,19 @@ async function processBlockchainTip({
 			const basecanUrl = `https://basescan.org/tx/${hash}`;
 
 			// Fetch updated tipper and recipient after DB increments
-			const updatedTipper = await prisma.user.findUnique({ where: { id: tipper.id } });
-			const updatedRecipient = await prisma.user.findUnique({ where: { id: recipient.id } });
+			const updatedTipper = await prisma.user.findUnique({
+				where: { id: tipper.id },
+			});
+			const updatedRecipient = await prisma.user.findUnique({
+				where: { id: recipient.id },
+			});
 
-			const tipsLeftRecipient = Math.max(0, dailyTipLimit - (updatedRecipient?.tipsGivenToday ?? 0));
-			const extraBalanceRecipient = updatedRecipient?.extraBalance?.toFixed(2) ?? "0.00";
+			const tipsLeftRecipient = Math.max(
+				0,
+				dailyTipLimit - (updatedRecipient?.tipsGivenToday ?? 0),
+			);
+			const extraBalanceRecipient =
+				updatedRecipient?.extraBalance?.toFixed(2) ?? "0.00";
 			let recipientMsg = `🎉 You just received a tip from <@${tipper.slackId}>!\nView transaction: ${basecanUrl}`;
 			if (messageLink) {
 				recipientMsg += `\nSee the message: ${messageLink}`;
@@ -215,8 +238,12 @@ async function processBlockchainTip({
 			await sendDM(client, recipient.slackId, recipientMsg);
 
 			// DM the tipper with confirmation and block explorer link
-			const tipsLeftTipper = Math.max(0, dailyTipLimit - (updatedTipper?.tipsGivenToday ?? 0));
-			const extraBalanceTipper = updatedTipper?.extraBalance?.toFixed(2) ?? "0.00";
+			const tipsLeftTipper = Math.max(
+				0,
+				dailyTipLimit - (updatedTipper?.tipsGivenToday ?? 0),
+			);
+			const extraBalanceTipper =
+				updatedTipper?.extraBalance?.toFixed(2) ?? "0.00";
 			let tipperMsg = `✅ You tipped <@${recipient.slackId}> ${tipAmount.toFixed(2)} USDC!\nView transaction: ${basecanUrl}`;
 			if (messageLink) {
 				tipperMsg += `\nSee the message: ${messageLink}`;
@@ -274,7 +301,11 @@ async function processInternalTip({
 		});
 		messageLink = permalink.permalink || "";
 	} catch (err) {
-		console.error("[TIP] Failed to get permalink", { err, channelId, messageTs });
+		console.error("[TIP] Failed to get permalink", {
+			err,
+			channelId,
+			messageTs,
+		});
 	}
 
 	// Calculate recipient's free tips left today
@@ -288,9 +319,11 @@ async function processInternalTip({
 	await sendDM(client, recipient.slackId, recipientMsg);
 
 	// Fetch updated tipper data for accurate counts
-	const updatedTipper = await prismaTx.user.findUnique({ where: { id: tipper.id } });
+	const updatedTipper = await prismaTx.user.findUnique({
+		where: { id: tipper.id },
+	});
 	if (!updatedTipper) return;
-	
+
 	// DM the tipper with confirmation and quota/balance info
 	const tipperTipsGiven = updatedTipper.tipsGivenToday ?? 0;
 	const tipsLeftTipper = Math.max(0, dailyTipLimit - tipperTipsGiven);
@@ -305,7 +338,107 @@ async function processInternalTip({
 	await sendDM(client, tipper.slackId, tipperMsg);
 }
 
-// --- Main Event Handler ---
+// --- Main Event Handlers ---
+
+// Handle direct tips via messages like "@username 💵"
+app.message(async ({ message, client }) => {
+	// Only process messages with text content
+	if (!("text" in message) || !message.text) return;
+
+	// Check if message contains @mention followed by 💵
+	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$)/g;
+	const matches = [...message.text.matchAll(tipPattern)];
+
+	if (matches.length === 0) return;
+
+	const tipperSlackId = message.user;
+	if (!tipperSlackId) return;
+
+	const messageTs = message.ts;
+	const channelId = message.channel;
+
+	const settings = await getSettings();
+	const tipAmount = new Decimal(settings.tipAmount);
+	const dailyTipLimit = Number(settings.dailyFreeTipAmount);
+
+	// Process each @mention tip in the message
+	for (const match of matches) {
+		const recipientSlackId = match[1];
+
+		await prisma.$transaction(async (prismaTx: Prisma.TransactionClient) => {
+			if (isSelfTip(tipperSlackId, recipientSlackId)) {
+				await sendDM(client, tipperSlackId, "You can't tip yourself!");
+				return;
+			}
+
+			// For direct tips, we allow multiple tips to same user in same message
+			// but still check for duplicate tips on the exact same message
+			if (
+				await isDuplicateTip(
+					prismaTx,
+					tipperSlackId,
+					recipientSlackId,
+					messageTs,
+				)
+			) {
+				await sendDM(
+					client,
+					tipperSlackId,
+					`You already tipped <@${recipientSlackId}> in this message.`,
+				);
+				return;
+			}
+
+			const tipper = await getOrCreateUser(prismaTx, tipperSlackId);
+			const tipsGivenToday = await resetDailyTipIfNeeded(prismaTx, tipper);
+			const { hasFreeTips, hasExtraBalance } = hasTipQuota(
+				tipsGivenToday,
+				tipper.extraBalance,
+				dailyTipLimit,
+				tipAmount,
+			);
+
+			if (!hasFreeTips && !hasExtraBalance) {
+				await sendDM(
+					client,
+					tipperSlackId,
+					"You've reached your daily free tip limit and have no extra balance left!",
+				);
+				return;
+			}
+
+			if (!hasFreeTips && hasExtraBalance) {
+				await deductExtraBalance(prismaTx, tipper, tipAmount);
+			}
+
+			const recipient = await getOrCreateUser(prismaTx, recipientSlackId);
+
+			if (recipient.ethAddress) {
+				await processBlockchainTip({
+					prismaTx,
+					client,
+					tipper,
+					recipient,
+					messageTs,
+					channelId,
+					tipAmount,
+					dailyTipLimit,
+				});
+			} else {
+				await processInternalTip({
+					prismaTx,
+					client,
+					tipper,
+					recipient,
+					messageTs,
+					channelId,
+					tipAmount,
+					dailyTipLimit,
+				});
+			}
+		});
+	}
+});
 
 app.event("reaction_added", async ({ event, client }) => {
 	if (
@@ -316,70 +449,116 @@ app.event("reaction_added", async ({ event, client }) => {
 	const tipperSlackId = event.user;
 	const messageTs = event.item.ts;
 	const channelId = event.item.channel;
-	const recipientSlackId = event.item_user;
-	if (!recipientSlackId) return;
+	const messageAuthorSlackId = event.item_user;
+	if (!messageAuthorSlackId) return;
 
 	const settings = await getSettings();
 	const tipAmount = new Decimal(settings.tipAmount);
 	const dailyTipLimit = Number(settings.dailyFreeTipAmount);
 
-	await prisma.$transaction(async (prismaTx: Prisma.TransactionClient) => {
-		if (isSelfTip(tipperSlackId, recipientSlackId)) {
-			await sendDM(client, tipperSlackId, "You can't tip yourself!");
-			return;
+	// Check if we need to fetch the message to look for @mentions with 💵
+	let recipientsToTip: string[] = [];
+
+	try {
+		// Fetch the message to check for @mention tips
+		const result = await client.conversations.history({
+			channel: channelId,
+			latest: messageTs,
+			limit: 1,
+			inclusive: true,
+		});
+
+		if (result.messages && result.messages.length > 0) {
+			const message = result.messages[0];
+			if (message.text) {
+				// Check if message contains @mention followed by 💵
+				const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$)/g;
+				const matches = [...message.text.matchAll(tipPattern)];
+
+				if (matches.length > 0) {
+					// If there are @mention tips, tip those users instead
+					recipientsToTip = matches.map((match) => match[1]);
+				}
+			}
 		}
-		if (
-			await isDuplicateTip(prismaTx, tipperSlackId, recipientSlackId, messageTs)
-		) {
-			await sendDM(
-				client,
-				tipperSlackId,
-				`You already tipped <@${recipientSlackId}> for this post.`,
-			);
-			return;
-		}
-		const tipper = await getOrCreateUser(prismaTx, tipperSlackId);
-		const tipsGivenToday = await resetDailyTipIfNeeded(prismaTx, tipper);
-		const { hasFreeTips, hasExtraBalance } = hasTipQuota(
-			tipsGivenToday,
-			tipper.extraBalance,
-			dailyTipLimit,
-			tipAmount,
-		);
-		if (!hasFreeTips && !hasExtraBalance) {
-			await sendDM(
-				client,
-				tipperSlackId,
-				"You've reached your daily free tip limit and have no extra balance left!",
-			);
-			return;
-		}
-		if (!hasFreeTips && hasExtraBalance) {
-			await deductExtraBalance(prismaTx, tipper, tipAmount);
-		}
-		const recipient = await getOrCreateUser(prismaTx, recipientSlackId);
-		if (recipient.ethAddress) {
-			await processBlockchainTip({
-				prismaTx,
-				client,
-				tipper,
-				recipient,
-				messageTs,
-				channelId,
-				tipAmount,
+	} catch (err) {
+		console.error("[TIP] Failed to fetch message for reaction", {
+			err,
+			channelId,
+			messageTs,
+		});
+	}
+
+	// If no @mention tips found, tip the message author as usual
+	if (recipientsToTip.length === 0) {
+		recipientsToTip = [messageAuthorSlackId];
+	}
+
+	// Process tips for each recipient
+	for (const recipientSlackId of recipientsToTip) {
+		await prisma.$transaction(async (prismaTx: Prisma.TransactionClient) => {
+			if (isSelfTip(tipperSlackId, recipientSlackId)) {
+				await sendDM(client, tipperSlackId, "You can't tip yourself!");
+				return;
+			}
+			if (
+				await isDuplicateTip(
+					prismaTx,
+					tipperSlackId,
+					recipientSlackId,
+					messageTs,
+				)
+			) {
+				await sendDM(
+					client,
+					tipperSlackId,
+					`You already tipped <@${recipientSlackId}> for this post.`,
+				);
+				return;
+			}
+			const tipper = await getOrCreateUser(prismaTx, tipperSlackId);
+			const tipsGivenToday = await resetDailyTipIfNeeded(prismaTx, tipper);
+			const { hasFreeTips, hasExtraBalance } = hasTipQuota(
+				tipsGivenToday,
+				tipper.extraBalance,
 				dailyTipLimit,
-			});
-		} else {
-			await processInternalTip({
-				prismaTx,
-				client,
-				tipper,
-				recipient,
-				messageTs,
-				channelId,
 				tipAmount,
-				dailyTipLimit,
-			});
-		}
-	});
+			);
+			if (!hasFreeTips && !hasExtraBalance) {
+				await sendDM(
+					client,
+					tipperSlackId,
+					"You've reached your daily free tip limit and have no extra balance left!",
+				);
+				return;
+			}
+			if (!hasFreeTips && hasExtraBalance) {
+				await deductExtraBalance(prismaTx, tipper, tipAmount);
+			}
+			const recipient = await getOrCreateUser(prismaTx, recipientSlackId);
+			if (recipient.ethAddress) {
+				await processBlockchainTip({
+					prismaTx,
+					client,
+					tipper,
+					recipient,
+					messageTs,
+					channelId,
+					tipAmount,
+					dailyTipLimit,
+				});
+			} else {
+				await processInternalTip({
+					prismaTx,
+					client,
+					tipper,
+					recipient,
+					messageTs,
+					channelId,
+					tipAmount,
+					dailyTipLimit,
+				});
+			}
+		});
+	}
 });
