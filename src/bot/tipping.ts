@@ -360,8 +360,6 @@ app.message(/<@[A-Z0-9]+>\s*(?:💵|\$|:dollar:)/, async ({ message, client }) =
 	const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
 	const matches = [...message.text.matchAll(tipPattern)];
 
-	console.log("[TIP] Pattern matches found:", matches.length, matches);
-
 	if (matches.length === 0) return;
 
 		const tipperSlackId = message.user;
@@ -466,15 +464,6 @@ app.event("reaction_added", async ({ event, client }) => {
 	const messageAuthorSlackId = event.item_user;
 	if (!messageAuthorSlackId) return;
 
-	console.log("[TIP] Reaction event details:", {
-		tipperSlackId,
-		messageTs,
-		channelId,
-		messageAuthorSlackId,
-		itemType: event.item.type,
-		reaction: event.reaction,
-	});
-
 	const settings = await getSettings();
 	const tipAmount = new Decimal(settings.tipAmount);
 	const dailyTipLimit = Number(settings.dailyFreeTipAmount);
@@ -512,15 +501,6 @@ app.event("reaction_added", async ({ event, client }) => {
 			});
 			message = result.messages?.[0];
 		}
-
-		console.log("[TIP] Fetched message for reaction:", {
-			messageTs,
-			channelId,
-			found: !!message,
-			fetchedTs: message?.ts,
-			text: message?.text?.substring(0, 50),
-		});
-
 		if (message && message.ts === messageTs && message.text) {
 			// Check if message contains @mention followed by 💵
 			const tipPattern = /<@([A-Z0-9]+)>\s*(?:💵|\$|:dollar:)/g;
